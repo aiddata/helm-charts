@@ -1,0 +1,78 @@
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: background-worker-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      app: geoquery-background-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+    # Background workers receive no inbound traffic - they pull from queues
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connection to RabbitMQ
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: geoquery-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow connection to Oxigraph
+    - to:
+        - podSelector:
+            matchLabels:
+              app: subjects-oxigraph
+      ports:
+        - protocol: TCP
+          port: 7878
+    # Allow external API egress (OSM, Wikidata, Postpass, R2, etc.)
+    {{- if .Values.networkPolicies.externalEgress.allowAll }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            # Exclude private networks to prevent lateral movement
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- else if .Values.networkPolicies.externalEgress.cidrs }}
+    {{- range .Values.networkPolicies.externalEgress.cidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,122 @@
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      app: geoquery-frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from gateway/ingress controller based on exposure.type
+    {{- if eq .Values.exposure.type "gateway" }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.exposure.gateway.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.exposure.gateway.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 8000
+    {{- else if eq .Values.exposure.type "ingress" }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.exposure.ingress.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.exposure.ingress.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 8000
+    {{- else if eq .Values.exposure.type "custom" }}
+    {{- range .Values.exposure.custom.networkPolicy }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .namespaceSelector | nindent 12 }}
+          {{- if .podSelector }}
+          podSelector:
+            {{- toYaml .podSelector | nindent 12 }}
+          {{- end }}
+      ports:
+        - protocol: TCP
+          port: 8000
+    {{- end }}
+    {{- end }}
+    {{- /* type "none" has no ingress rules - traffic is blocked */}}
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus to scrape metrics
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9090
+    {{- end }}
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connection to RabbitMQ
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: geoquery-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow connection to Oxigraph
+    - to:
+        - podSelector:
+            matchLabels:
+              app: subjects-oxigraph
+      ports:
+        - protocol: TCP
+          port: 7878
+    # Allow external API egress (OSM, Wikidata, Protomaps, R2, etc.)
+    {{- if .Values.networkPolicies.externalEgress.allowAll }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            # Exclude private networks to prevent lateral movement
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- else if .Values.networkPolicies.externalEgress.cidrs }}
+    {{- range .Values.networkPolicies.externalEgress.cidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
+    {{- end }}
+{{- end }}

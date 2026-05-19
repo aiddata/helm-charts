@@ -1,0 +1,13 @@
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: geoquery-rabbitmq
+spec:
+  replicas: 3
+  resources:
+    requests:
+      cpu: {{ .Values.rabbitmq.resources.requests.cpu }}
+      memory: {{ .Values.rabbitmq.resources.requests.memory }}
+    limits:
+      cpu: {{ .Values.rabbitmq.resources.limits.cpu }}
+      memory: {{ .Values.rabbitmq.resources.limits.memory }}

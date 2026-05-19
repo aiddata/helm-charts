@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: geoquery-db-migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 21600 # six hours
+  template:
+    metadata:
+      labels:
+        app: geoquery-db-migration
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: django
+          image: {{ .Values.frontend.image }}
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            ["/app/.venv/bin/python", "manage.py", "migrate"]
+          env:
+            - name: DJANGO_SECRET_KEY
+              value: {{ .Values.django.secretKey }}
+            - name: DJANGO_ALLOWED_HOSTS
+              value: {{ .Values.django.allowedHosts }}
+            - name: DJANGO_DEBUG
+              value: "{{ .Values.django.debug }}"
+            - name: PG_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: host
+            - name: PG_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: dbname
+            - name: PG_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: port
+            - name: PG_USER
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: username
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: password
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

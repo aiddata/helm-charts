@@ -1,0 +1,12 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-geoquery-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+data:
+  django-dashboard.json: |-
+{{ .Files.Get "dashboards/django.json" | replace "$namespace" .Release.Namespace | replace "${DS_PROMETHEUS}" "prometheus" | replace "PLACEHOLDER_TITLE" .Values.metrics.grafanaDashboard.title | indent 4 }}
+{{- end }}

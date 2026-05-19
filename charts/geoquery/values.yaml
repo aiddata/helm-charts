@@ -1,0 +1,251 @@
+frontend:
+  image: ghcr.io/aiddata/geoquery-update:latest
+  pullPolicy: IfNotPresent
+  replicaCount: 3
+
+# Exposure configuration (how the app is exposed externally)
+# type: "none" | "ingress" | "gateway" | "custom"
+#   - none: No ingress resources created, no external traffic allowed
+#   - ingress: Traditional Kubernetes Ingress resource
+#   - gateway: Gateway API HTTPRoute resource
+#   - custom: No resources created, but allows traffic from custom sources (bring your own ingress/gateway)
+exposure:
+  type: none
+
+  # Traditional Kubernetes Ingress configuration (used when type: ingress)
+  ingress:
+    className: "" # e.g., "nginx", "traefik"
+    annotations: {}
+      # cert-manager.io/cluster-issuer: letsencrypt-prod
+      # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: geoquery.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    #  - secretName: geoquery-tls
+    #    hosts:
+    #      - geoquery.example.com
+    # Network policy: which pods can send traffic to the frontend
+    networkPolicy:
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+
+  # Gateway API configuration (used when type: gateway)
+  gateway:
+    # Reference to an existing Gateway resource
+    parentRefs:
+      - name: eg
+        namespace: envoy-gateway-system
+    hostnames:
+      - geoquery.example.com
+    # Network policy: which pods can send traffic to the frontend
+    networkPolicy:
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: envoy-gateway-system
+      podSelector:
+        matchLabels:
+          gateway.envoyproxy.io/owning-gateway-name: eg
+
+  # Custom configuration (used when type: custom)
+  # Use this when you manage your own Ingress/Gateway resources outside this chart
+  custom:
+    # Network policy peers that should be allowed to reach the frontend
+    networkPolicy: []
+    # - namespaceSelector:
+    #     matchLabels:
+    #       custom-label: value
+    #   podSelector:
+    #     matchLabels:
+    #       app: custom-proxy
+
+# Network Policies for securing pod-to-pod and external communication
+networkPolicies:
+  enabled: false
+
+  # External API egress configuration
+  externalEgress:
+    # If true, allows all external egress (0.0.0.0/0)
+    # If false, only allows egress to specified CIDRs
+    allowAll: true
+    # Specific CIDRs to allow when allowAll is false
+    # cidrs:
+    #   - cidr: 0.0.0.0/0
+    #     ports:
+    #       - port: 443
+    #         protocol: TCP
+
+  # Kubernetes API server endpoint (needed by CNPG pods to query cluster resources)
+  # Use the actual API server endpoint IP, not the kubernetes ClusterIP —
+  # NetworkPolicy ipBlock rules are evaluated after DNAT, so the ClusterIP
+  # (e.g. 10.43.0.1) won't match. Find it with: kubectl get endpoints kubernetes -n default
+  kubeApiServer:
+    cidr: "172.30.0.11/32"
+    port: 6443
+
+  # DNS egress (required for all pods to resolve service names)
+  dns:
+    # Namespace where CoreDNS/kube-dns runs
+    namespace: kube-system
+    # Labels to select DNS pods
+    podSelector:
+      matchLabels:
+        k8s-app: kube-dns
+
+  # Namespace where the CNPG operator is installed
+  cnpgOperator:
+    namespace: cnpg-system
+
+  # Namespace where the RabbitMQ cluster operator is installed
+  rabbitmqOperator:
+    namespace: rabbitmq-system
+
+tasks:
+  background:
+    replicaCount: 3
+  processing:
+    replicaCount: 3
+  beat:
+    enabled: true
+
+rabbitmq:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+osm:
+  serverUrl: https://www.openstreetmap.org
+  clientId: <CLIENT ID>
+  clientSecret: <CLIENT SECRET>
+  secretKey: <SECRET KEY> # generate a 30-char "password" using a generator
+  redirectUri: <REDIRECT URI> # https://example.com/auth/callback/
+
+django:
+  timeZone: "UTC"
+  secretKey: <DJANGO SECRET KEY>
+  debug: "false"
+  allowedHosts: <ALLOWED HOSTS>
+  adminUsernames: <USERNAMES> # comma-separated list with no spaces
+  behindCloudflareTunnel: "false"
+
+geoquery:
+  directories: "false"
+
+clip:
+  storageClass: local-path
+  size: 10Gi
+
+oxigraph:
+  image: ghcr.io/oxigraph/oxigraph:0.5.8
+  pullPolicy: IfNotPresent
+  timeout: 60
+  storage:
+    storageClass: local-path
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+database:
+  replicas: 3
+  storage:
+    storageClass: local-path
+    size: 50Gi
+  backup:
+    enabled: true
+    schedule: "0 0 0,12 * * *"
+    retentionPolicy: "30d"
+    objectStoreName: my-backup-store
+    s3Credentials:
+      destinationPath: s3://backup-bucket-name
+      endpointUrl: https://s3.zone.example.com
+      accessKeyId:
+        name: cnpg-backup
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: cnpg-backup
+        key: SECRET_ACCESS_KEY
+  recover:
+    enabled: false
+    objectStoreName: my-recover-store
+    s3Credentials:
+      destinationPath: s3://recover-bucket-name
+      endpointUrl: https://s3.zone.example.com
+      accessKeyId:
+        name: cnpg-recover
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: cnpg-recover
+        key: SECRET_ACCESS_KEY
+
+protomaps:
+  key: MY_PROTOMAPS_KEY
+
+flickr:
+  apiKey: ""
+  apiSecret: ""
+
+import:
+  r2:
+    publicUrlBase: ""
+    bucketName: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    endpointUrl: ""
+
+metadataRefresh:
+  # Refresh intervals in seconds (how often Celery Beat triggers each task)
+  # Default 60s = 1 per minute
+  wikidataInterval: 60
+  osmInterval: 60
+  # Hours after which metadata is considered stale and needs refresh
+  staleHours: 24
+  # Max consecutive failures before giving up on a record
+  maxFailures: 5
+  # Postpass API settings for OSM geometry fetching
+  postpassUrl: "https://postpass.geofabrik.de/api/0.2/interpreter"
+  postpassTimeout: 60
+  # Bounding box for OSM queries (Virginia and surrounding area)
+  postpassBbox: "ST_SetSRID(ST_MakeBox2D(ST_MakePoint(-84.72, 35.90), ST_MakePoint(-74.97, 39.71)), 4326)"
+
+# Prometheus metrics configuration
+metrics:
+  enabled: false
+  path: "/metrics"
+
+  grafanaDashboard:
+    title: "Yesterdays"
+
+  networkPolicy:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: monitoring
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus
+
+  serviceMonitor:
+    enabled: true
+    namespace: "" # Empty = same namespace as app
+    interval: "30s"
+    scrapeTimeout: "10s"
+    labels: {}
+
+  prometheusRule:
+    enabled: false # Enable when you want alerting
+    namespace: ""
+    labels: {}

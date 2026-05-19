@@ -1,0 +1,145 @@
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: geoquery-db
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow connections from frontend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-frontend
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connections from background workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-background-worker
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connections from processing workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-processing-worker
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connections from celery-beat
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-celery-beat
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connections from migration job
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-db-migration
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connections from import
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-import
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus to scrape metrics
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9187
+    {{- end }}
+    # Allow CNPG operator communication
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+    # Allow cluster replication between CNPG instances
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kubernetes API server access (CNPG instance manager queries cluster resources)
+    # Uses the actual endpoint IP (not ClusterIP) since ipBlock is evaluated post-DNAT
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.kubeApiServer.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicies.kubeApiServer.port }}
+    # Allow cluster replication between CNPG instances
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow CNPG operator communication
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- if .Values.database.backup.enabled }}
+    # Allow S3 backup egress
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+{{- end }}

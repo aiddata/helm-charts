@@ -1,0 +1,99 @@
+{{- if .Values.database.backup.enabled }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ .Values.database.backup.objectStoreName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install
+spec:
+  configuration:
+    destinationPath: {{ .Values.database.backup.s3Credentials.destinationPath }}
+    endpointURL: {{ .Values.database.backup.s3Credentials.endpointUrl }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ .Values.database.backup.s3Credentials.accessKeyId.name }}
+        key: {{ .Values.database.backup.s3Credentials.accessKeyId.key }}
+      secretAccessKey:
+        name: {{ .Values.database.backup.s3Credentials.secretAccessKey.name }}
+        key: {{ .Values.database.backup.s3Credentials.secretAccessKey.key }}
+    wal:
+      compression: gzip
+  retentionPolicy: {{ .Values.database.backup.retentionPolicy }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: geoquery-backup
+spec:
+  cluster:
+    name: geoquery-db
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  schedule: {{ .Values.database.backup.schedule }}
+  backupOwnerReference: self
+---
+{{- end }}
+{{- if .Values.database.recover.enabled }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ .Values.database.recover.objectStoreName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install
+spec:
+  configuration:
+    destinationPath: {{ .Values.database.recover.s3Credentials.destinationPath }}
+    endpointURL: {{ .Values.database.recover.s3Credentials.endpointUrl }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ .Values.database.recover.s3Credentials.accessKeyId.name }}
+        key: {{ .Values.database.recover.s3Credentials.accessKeyId.key }}
+      secretAccessKey:
+        name: {{ .Values.database.recover.s3Credentials.secretAccessKey.name }}
+        key: {{ .Values.database.recover.s3Credentials.secretAccessKey.key }}
+    wal:
+      compression: gzip
+---
+{{- end }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: geoquery-db
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install
+spec:
+  instances: {{ .Values.database.replicas }}
+  imageName: ghcr.io/cloudnative-pg/postgis:17
+  {{- if .Values.database.recover.enabled }}
+  bootstrap:
+    recovery:
+      source: source
+  externalClusters:
+  - name: source
+    plugin:
+      name: barman-cloud.cloudnative-pg.io
+      parameters:
+        barmanObjectName: {{ .Values.database.recover.objectStoreName }}
+        serverName: geoquery-db
+  {{- else }}
+  bootstrap:
+    initdb:
+      postInitTemplateSQL:
+        - CREATE EXTENSION vector;
+        - CREATE EXTENSION pg_trgm;
+        - CREATE EXTENSION postgis;
+  {{- end }}
+  {{- if .Values.database.backup.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ .Values.database.backup.objectStoreName }}
+  {{- end }}
+  storage:
+    storageClass: {{ .Values.database.storage.storageClass }}
+    size: {{ .Values.database.storage.size }}
