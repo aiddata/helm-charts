@@ -1,7 +1,15 @@
-frontend:
-  image: ghcr.io/aiddata/geoquery-update:latest
+image:
+  registry: ghcr.io/aiddata
+  tag: latest
   pullPolicy: IfNotPresent
-  replicaCount: 3
+
+frontend:
+  repository: frontend
+  replicaCount: 1
+
+backend:
+  repository: backend
+  replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
 # type: "none" | "ingress" | "gateway" | "custom"
@@ -123,50 +131,22 @@ rabbitmq:
       cpu: 500m
       memory: 512Mi
 
-osm:
-  serverUrl: https://www.openstreetmap.org
-  clientId: <CLIENT ID>
-  clientSecret: <CLIENT SECRET>
-  secretKey: <SECRET KEY> # generate a 30-char "password" using a generator
-  redirectUri: <REDIRECT URI> # https://example.com/auth/callback/
-
 django:
   timeZone: "UTC"
   secretKey: <DJANGO SECRET KEY>
   debug: "false"
   allowedHosts: <ALLOWED HOSTS>
-  adminUsernames: <USERNAMES> # comma-separated list with no spaces
-  behindCloudflareTunnel: "false"
 
 geoquery:
   directories: "false"
 
-clip:
-  storageClass: local-path
-  size: 10Gi
-
-oxigraph:
-  image: ghcr.io/oxigraph/oxigraph:0.5.8
-  pullPolicy: IfNotPresent
-  timeout: 60
-  storage:
-    storageClass: local-path
-    size: 10Gi
-  resources:
-    requests:
-      cpu: 100m
-      memory: 1Gi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
-
 database:
   replicas: 3
   storage:
-    storageClass: local-path
+    storageClass: nfs-csi
     size: 50Gi
   backup:
-    enabled: true
+    enabled: false
     schedule: "0 0 0,12 * * *"
     retentionPolicy: "30d"
     objectStoreName: my-backup-store
@@ -194,33 +174,6 @@ database:
 
 protomaps:
   key: MY_PROTOMAPS_KEY
-
-flickr:
-  apiKey: ""
-  apiSecret: ""
-
-import:
-  r2:
-    publicUrlBase: ""
-    bucketName: ""
-    accessKeyId: ""
-    secretAccessKey: ""
-    endpointUrl: ""
-
-metadataRefresh:
-  # Refresh intervals in seconds (how often Celery Beat triggers each task)
-  # Default 60s = 1 per minute
-  wikidataInterval: 60
-  osmInterval: 60
-  # Hours after which metadata is considered stale and needs refresh
-  staleHours: 24
-  # Max consecutive failures before giving up on a record
-  maxFailures: 5
-  # Postpass API settings for OSM geometry fetching
-  postpassUrl: "https://postpass.geofabrik.de/api/0.2/interpreter"
-  postpassTimeout: 60
-  # Bounding box for OSM queries (Virginia and surrounding area)
-  postpassBbox: "ST_SetSRID(ST_MakeBox2D(ST_MakePoint(-84.72, 35.90), ST_MakePoint(-74.97, 39.71)), 4326)"
 
 # Prometheus metrics configuration
 metrics:
