@@ -1,6 +1,6 @@
 image:
   registry: ghcr.io/aiddata
-  tag: latest
+  tag: a449761
   pullPolicy: IfNotPresent
 
 frontend:
