@@ -20,7 +20,6 @@ spec:
       containers:
         - name: django
           image: {{ .Values.frontend.image }}
-          imagePullPolicy: {{ .Values.frontend.imagePullPolicy }}
           command: ["sleep", "infinity"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -62,16 +61,6 @@ spec:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: password
-            - name: IMPORT_R2_PUBLIC_URL_BASE
-              value: {{ .Values.import.r2.publicUrlBase }}
-            - name: IMPORT_R2_BUCKET_NAME
-              value: {{ .Values.import.r2.bucketName }}
-            - name: IMPORT_R2_ACCESS_KEY_ID
-              value: {{ .Values.import.r2.accessKeyId }}
-            - name: IMPORT_R2_SECRET_ACCESS_KEY
-              value: {{ .Values.import.r2.secretAccessKey }}
-            - name: IMPORT_R2_ENDPOINT_URL
-              value: {{ .Values.import.r2.endpointUrl }}
             - name: RABBITMQ_HOST
               value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
             - name: RABBITMQ_PORT
@@ -88,14 +77,6 @@ spec:
                   key: password
             - name: CELERY_BROKER_URL
               value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
-            - name: OXIGRAPH_URL
-              value: "http://subjects-oxigraph.{{ .Release.Namespace }}.svc.cluster.local:7878"
-            - name: OXIGRAPH_TIMEOUT
-              value: {{ .Values.oxigraph.timeout | quote }}
-            - name: FLICKR_API_KEY
-              value: {{ .Values.flickr.apiKey }}
-            - name: FLICKR_API_SECRET
-              value: {{ .Values.flickr.apiSecret }}
             - name: CLIP_WARMUP_ENABLED
               value: "false"
           resources:

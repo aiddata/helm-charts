@@ -20,7 +20,6 @@ spec:
       containers:
         - name: django
           image: {{ .Values.frontend.image }}
-          imagePullPolicy: {{ .Values.frontend.imagePullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -63,28 +62,6 @@ spec:
                   key: password
             - name: PROTOMAPS_API_KEY
               value: {{.Values.protomaps.key }}
-            - name: OSM_ADMIN_USERNAMES
-              value: {{.Values.django.adminUsernames }}
-            - name: OSM_URL
-              value: {{ .Values.osm.serverUrl }}
-            - name: OSM_CLIENT_ID
-              value: {{ .Values.osm.clientId }}
-            - name: OSM_CLIENT_SECRET
-              value: {{ .Values.osm.clientSecret }}
-            - name: OSM_SECRET_KEY
-              value: {{ .Values.osm.secretKey }}
-            - name: OSM_LOGIN_REDIRECT_URI
-              value: {{ .Values.osm.redirectUri }}
-            - name: IMPORT_R2_PUBLIC_URL_BASE
-              value: {{ .Values.import.r2.publicUrlBase }}
-            - name: IMPORT_R2_BUCKET_NAME
-              value: {{ .Values.import.r2.bucketName }}
-            - name: IMPORT_R2_ACCESS_KEY_ID
-              value: {{ .Values.import.r2.accessKeyId }}
-            - name: IMPORT_R2_SECRET_ACCESS_KEY
-              value: {{ .Values.import.r2.secretAccessKey }}
-            - name: IMPORT_R2_ENDPOINT_URL
-              value: {{ .Values.import.r2.endpointUrl }}
             - name: RABBITMQ_HOST
               value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
             - name: RABBITMQ_PORT
@@ -101,14 +78,8 @@ spec:
                   key: password
             - name: CELERY_BROKER_URL
               value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
-            - name: OXIGRAPH_URL
-              value: "http://subjects-oxigraph.{{ .Release.Namespace }}.svc.cluster.local:7878"
-            - name: OXIGRAPH_TIMEOUT
-              value: {{ .Values.oxigraph.timeout | quote }}
             - name: CLIP_WARMUP_ENABLED
               value: "false"
-            - name: BEHIND_CLOUDFLARE_TUNNEL
-              value: "{{ .Values.django.behindCloudflareTunnel }}"
             - name: DIRECTORIES_ENABLED
               value: "{{ .Values.geoquery.directories }}"
             {{- if .Values.metrics.enabled }}

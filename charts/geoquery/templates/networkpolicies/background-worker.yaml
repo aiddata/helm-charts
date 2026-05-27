@@ -45,14 +45,6 @@ spec:
       ports:
         - protocol: TCP
           port: 5672
-    # Allow connection to Oxigraph
-    - to:
-        - podSelector:
-            matchLabels:
-              app: subjects-oxigraph
-      ports:
-        - protocol: TCP
-          port: 7878
     # Allow external API egress (OSM, Wikidata, Postpass, R2, etc.)
     {{- if .Values.networkPolicies.externalEgress.allowAll }}
     - to:

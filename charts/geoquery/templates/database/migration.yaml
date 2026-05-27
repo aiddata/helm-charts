@@ -20,7 +20,6 @@ spec:
       containers:
         - name: django
           image: {{ .Values.frontend.image }}
-          imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
