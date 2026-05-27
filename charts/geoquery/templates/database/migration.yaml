@@ -19,7 +19,7 @@ spec:
         runAsGroup: 1000
       containers:
         - name: django
-          image: {{ .Values.frontend.image }}
+          image: {{ .Values.image.registry }}/{{ .Values.backend.repository }}:{{ .Values.image.tag }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

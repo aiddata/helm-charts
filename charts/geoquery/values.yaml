@@ -1,14 +1,13 @@
 image:
   registry: ghcr.io/aiddata
-  tag: a449761
-  pullPolicy: IfNotPresent
+  tag: 8c862e5
 
 frontend:
-  repository: frontend
+  repository: geoquery-frontend
   replicaCount: 1
 
 backend:
-  repository: backend
+  repository: geoquery-backend
   replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
