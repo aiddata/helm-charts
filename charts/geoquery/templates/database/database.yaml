@@ -83,8 +83,6 @@ spec:
   bootstrap:
     initdb:
       postInitTemplateSQL:
-        - CREATE EXTENSION vector;
-        - CREATE EXTENSION pg_trgm;
         - CREATE EXTENSION postgis;
   {{- end }}
   {{- if .Values.database.backup.enabled }}
