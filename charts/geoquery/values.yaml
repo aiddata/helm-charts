@@ -1,13 +1,9 @@
-image:
-  registry: ghcr.io/aiddata
-  tag: 8c862e5
-
 frontend:
-  repository: geoquery-frontend
+  image: ghcr.io/aiddata/geoquery-frontend:8c862e5
   replicaCount: 1
 
 backend:
-  repository: geoquery-backend
+  image: ghcr.io/aiddata/geoquery-backend:8c862e598b240e
   replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
