@@ -62,22 +62,17 @@ spec:
                   key: password
             - name: PROTOMAPS_API_KEY
               value: {{.Values.protomaps.key }}
-            - name: RABBITMQ_HOST
-              value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
-            - name: RABBITMQ_PORT
-              value: "5672"
-            - name: RABBITMQ_USERNAME
+            - name: REDIS_HOST
+              value: "geoquery-redis.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: geoquery-rabbitmq-default-user
-                  key: username
-            - name: RABBITMQ_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: geoquery-rabbitmq-default-user
+                  name: geoquery-redis-secret
                   key: password
             - name: CELERY_BROKER_URL
-              value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
+              value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
             - name: CLIP_WARMUP_ENABLED
               value: "false"
             - name: DIRECTORIES_ENABLED

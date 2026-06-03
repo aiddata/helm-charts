@@ -29,14 +29,14 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Allow connection to RabbitMQ (to enqueue scheduled tasks)
+    # Allow connection to Redis (to enqueue scheduled tasks)
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: geoquery-rabbitmq
+              app.kubernetes.io/name: geoquery-redis
       ports:
         - protocol: TCP
-          port: 5672
+          port: 6379
     # Celery beat also needs database access for django-celery-beat schedule storage
     - to:
         - podSelector:

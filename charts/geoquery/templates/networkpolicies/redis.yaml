@@ -1,0 +1,79 @@
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: geoquery-redis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow Redis connections from frontend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-frontend
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow Redis connections from background workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-background-worker
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow Redis connections from processing workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-processing-worker
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow Redis connections from celery-beat
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-celery-beat
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow Redis connections from import
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-import
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow Redis operator communication
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.redisOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 6379
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

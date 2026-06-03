@@ -105,9 +105,9 @@ networkPolicies:
   cnpgOperator:
     namespace: cnpg-system
 
-  # Namespace where the RabbitMQ cluster operator is installed
-  rabbitmqOperator:
-    namespace: rabbitmq-system
+  # Namespace where the Redis operator is installed
+  redisOperator:
+    namespace: redis-operator
 
 tasks:
   background:
@@ -117,7 +117,11 @@ tasks:
   beat:
     enabled: true
 
-rabbitmq:
+redis:
+  # Redis image used by the Redis operator (Celery broker)
+  image: quay.io/opstree/redis:v7.0.15
+  # Password protecting Redis. Change this before deploying.
+  password: <REDIS PASSWORD>
   resources:
     requests:
       cpu: 100m
