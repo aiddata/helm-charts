@@ -61,17 +61,22 @@ spec:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: password
-            - name: REDIS_HOST
-              value: "geoquery-redis.{{ .Release.Namespace }}.svc.cluster.local"
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_PASSWORD
+            - name: RABBITMQ_HOST
+              value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: geoquery-redis-secret
+                  name: geoquery-rabbitmq-default-user
+                  key: username
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-rabbitmq-default-user
                   key: password
             - name: CELERY_BROKER_URL
-              value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+              value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
             - name: CLIP_WARMUP_ENABLED
               value: "false"
           resources:

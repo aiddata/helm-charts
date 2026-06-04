@@ -1,0 +1,113 @@
+{{- if .Values.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: geoquery-rabbitmq
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow AMQP connections from frontend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-frontend
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow AMQP connections from background workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-background-worker
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow AMQP connections from processing workers
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-processing-worker
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow AMQP connections from celery-beat
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-celery-beat
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow AMQP connections from import
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-import
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow cluster peer communication (Erlang distribution + clustering)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: geoquery-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 4369   # epmd
+        - protocol: TCP
+          port: 25672  # Erlang distribution
+        - protocol: TCP
+          port: 5672   # AMQP
+    # Allow RabbitMQ operator communication
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.rabbitmqOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 15672  # Management API
+        - protocol: TCP
+          port: 5672
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow cluster peer communication
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: geoquery-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 4369   # epmd
+        - protocol: TCP
+          port: 25672  # Erlang distribution
+        - protocol: TCP
+          port: 5672   # AMQP
+    # Allow RabbitMQ operator communication
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.rabbitmqOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

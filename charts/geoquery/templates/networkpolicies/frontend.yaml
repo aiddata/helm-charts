@@ -81,14 +81,14 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
-    # Allow connection to Redis
+    # Allow connection to RabbitMQ
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: geoquery-redis
+              app.kubernetes.io/name: geoquery-rabbitmq
       ports:
         - protocol: TCP
-          port: 6379
+          port: 5672
     # Allow external API egress (OSM, Wikidata, Protomaps, R2, etc.)
     {{- if .Values.networkPolicies.externalEgress.allowAll }}
     - to:
