@@ -2,9 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: processing-worker
-  namespace: { { .Release.Namespace } }
+  namespace: {{ .Release.Namespace }}
 spec:
-  replicas: { { .Values.tasks.processing.replicaCount } }
+  replicas: {{ .Values.tasks.processing.replicaCount }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -25,7 +25,7 @@ spec:
         runAsGroup: 1000
       containers:
         - name: celery-worker
-          image: { { .Values.backend.image } }
+          image: {{ .Values.backend.image }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -46,11 +46,11 @@ spec:
             - name: CLIP_WARMUP_ENABLED
               value: "true"
             - name: DJANGO_TIME_ZONE
-              value: { { .Values.django.timeZone } }
+              value: {{ .Values.django.timeZone }}
             - name: DJANGO_SECRET_KEY
-              value: { { .Values.django.secretKey } }
+              value: {{ .Values.django.secretKey }}
             - name: DJANGO_ALLOWED_HOSTS
-              value: { { .Values.django.allowedHosts } }
+              value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
             - name: PG_HOST
@@ -79,7 +79,7 @@ spec:
                   name: geoquery-db-app
                   key: password
             - name: PROTOMAPS_API_KEY
-              value: { { .Values.protomaps.key } }
+              value: {{ .Values.protomaps.key }}
             - name: RABBITMQ_HOST
               value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
             - name: RABBITMQ_PORT
