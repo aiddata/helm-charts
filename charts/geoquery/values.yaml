@@ -143,7 +143,7 @@ volumes:
     size: 100Gi
     # NFS server hostname/address and the exported share path
     server: 128.239.59.130
-    share: /sciclone/nova/test/geo
+    share: /sciclone/nova/REU/geo/data
     # Optional sub-directory under the share to mount (empty = share root)
     subDir: ""
     mountOptions:
