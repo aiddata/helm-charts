@@ -43,8 +43,6 @@ spec:
             - "--concurrency=1"
             - "--max-tasks-per-child=100"
           env:
-            - name: CLIP_WARMUP_ENABLED
-              value: "true"
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
             - name: DJANGO_SECRET_KEY
