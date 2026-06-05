@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:d3b8c5d
+  image: ghcr.io/aiddata/geoquery-backend:65ea887
   replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
