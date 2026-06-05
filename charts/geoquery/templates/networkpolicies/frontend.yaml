@@ -24,7 +24,7 @@ spec:
             {{- toYaml .Values.exposure.gateway.networkPolicy.podSelector | nindent 12 }}
       ports:
         - protocol: TCP
-          port: 8000
+          port: 3000
     {{- else if eq .Values.exposure.type "ingress" }}
     - from:
         - namespaceSelector:
@@ -33,7 +33,7 @@ spec:
             {{- toYaml .Values.exposure.ingress.networkPolicy.podSelector | nindent 12 }}
       ports:
         - protocol: TCP
-          port: 8000
+          port: 3000
     {{- else if eq .Values.exposure.type "custom" }}
     {{- range .Values.exposure.custom.networkPolicy }}
     - from:
@@ -45,7 +45,7 @@ spec:
           {{- end }}
       ports:
         - protocol: TCP
-          port: 8000
+          port: 3000
     {{- end }}
     {{- end }}
     {{- /* type "none" has no ingress rules - traffic is blocked */}}
