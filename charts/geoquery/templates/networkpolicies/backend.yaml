@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: frontend-network-policy
+  name: backend-network-policy
   namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
@@ -10,7 +10,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: geoquery-frontend
+      app: geoquery-backend
   policyTypes:
     - Ingress
     - Egress
@@ -60,7 +60,55 @@ spec:
         - protocol: TCP
           port: 9090
     {{- end }}
-  # The frontend is a dumb UI - it initiates no outbound connections, so all
-  # egress is denied.
-  egress: []
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow connection to RabbitMQ
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: geoquery-rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+    # Allow external API egress (OSM, Wikidata, Protomaps, R2, etc.)
+    {{- if .Values.networkPolicies.externalEgress.allowAll }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            # Exclude private networks to prevent lateral movement
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- else if .Values.networkPolicies.externalEgress.cidrs }}
+    {{- range .Values.networkPolicies.externalEgress.cidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
+    {{- end }}
 {{- end }}

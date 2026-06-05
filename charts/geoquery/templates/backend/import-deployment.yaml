@@ -61,6 +61,8 @@ spec:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: password
+            - name: PROTOMAPS_API_KEY
+              value: {{.Values.protomaps.key }}
             - name: RABBITMQ_HOST
               value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
             - name: RABBITMQ_PORT
@@ -77,8 +79,10 @@ spec:
                   key: password
             - name: CELERY_BROKER_URL
               value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
-            - name: CLIP_WARMUP_ENABLED
-              value: "false"
+            {{- if .Values.metrics.enabled }}
+            - name: PROMETHEUS_ENABLED
+              value: "true"
+            {{- end }}
           resources:
             requests:
               memory: "500Mi"
@@ -87,14 +91,8 @@ spec:
               memory: "4000Mi"
               cpu: "2000m"
           volumeMounts:
-            - name: clip-cache
-              mountPath: /app/models
-              readOnly: true
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: clip-cache
-          persistentVolumeClaim:
-            claimName: geoquery-clip-cache
         - name: tmp
           emptyDir: {}
