@@ -135,6 +135,22 @@ django:
 geoquery:
   directories: "false"
 
+# Shared NFS-backed volumes mounted by pods across the chart
+volumes:
+  # geoquery-data: read-only NFS pool of source datasets
+  data:
+    storageClassName: nfs-csi
+    size: 100Gi
+    # NFS server hostname/address and the exported share path
+    server: 128.239.59.130
+    share: /sciclone/nova/test/geo
+    # Optional sub-directory under the share to mount (empty = share root)
+    subDir: ""
+    mountOptions:
+      - ro
+      - hard
+      - nfsvers=4.1
+
 database:
   replicas: 3
   storage:
