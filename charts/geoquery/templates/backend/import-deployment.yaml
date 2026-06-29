@@ -36,6 +36,8 @@ spec:
               value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
+            - name: EMAIL_PASSWORD
+              value: {{ .Values.django.emailPassword | quote }}
             - name: PG_HOST
               valueFrom:
                 secretKeyRef:

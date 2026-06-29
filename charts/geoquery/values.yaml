@@ -129,6 +129,7 @@ rabbitmq:
 django:
   timeZone: "UTC"
   secretKey: <DJANGO SECRET KEY>
+  emailPassword: <EMAIL PASSWORD>
   debug: "false"
   allowedHosts: <ALLOWED HOSTS>
   # Comma-separated origins Django trusts for unsafe (POST) requests behind the
