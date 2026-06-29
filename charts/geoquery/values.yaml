@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:84b7c93
+  image: ghcr.io/aiddata/geoquery-frontend:571c06f
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:84b7c93
+  image: ghcr.io/aiddata/geoquery-backend:571c06f
   replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
@@ -131,6 +131,10 @@ django:
   secretKey: <DJANGO SECRET KEY>
   debug: "false"
   allowedHosts: <ALLOWED HOSTS>
+  # Comma-separated origins Django trusts for unsafe (POST) requests behind the
+  # TLS-terminating proxy (Cloudflare Tunnel). Each must include the scheme,
+  # e.g. "https://geoquery.org". Required for admin login POSTs. Empty disables.
+  csrfTrustedOrigins: ""
 
 geoquery:
   directories: "false"
