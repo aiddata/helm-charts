@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:84b7c93
+  image: ghcr.io/aiddata/geoquery-frontend:81e7bf7
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:571c06f
+  image: ghcr.io/aiddata/geoquery-backend:81e7bf7
   replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
@@ -153,6 +153,16 @@ volumes:
     subDir: ""
     mountOptions:
       - ro
+      - hard
+      - nfsvers=4.1
+  # geoquery-results: read-write NFS pool for generated query results
+  results:
+    storageClassName: nfs-csi
+    size: 100Gi
+    server: 128.239.59.130
+    share: /sciclone/nova/test/results
+    subDir: ""
+    mountOptions:
       - hard
       - nfsvers=4.1
 

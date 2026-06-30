@@ -1,0 +1,52 @@
+{{- $pvname := "geoquery-results" }}
+{{- $pvexists := lookup "v1" "PersistentVolume" "" $pvname }}
+{{- if not $pvexists -}}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ $pvname }}
+  annotations:
+    pv.kubernetes.io/provisioned-by: nfs.csi.k8s.io
+spec:
+  capacity:
+    # Not enforced for NFS — only used for PV/PVC binding (must be >= the PVC request)
+    storage: {{ .Values.volumes.results.size }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.volumes.results.storageClassName }}
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: geoquery-results
+  mountOptions:
+    {{- toYaml .Values.volumes.results.mountOptions | nindent 4 }}
+  csi:
+    driver: nfs.csi.k8s.io
+    # volumeHandle format: {nfs-server-address}#{share-name}#{sub-dir-name}
+    # make sure this value is unique for every share in the cluster
+    volumeHandle: {{ printf "%s#%s#%s" .Values.volumes.results.server .Values.volumes.results.share .Values.volumes.results.subDir }}
+    volumeAttributes:
+      server: {{ .Values.volumes.results.server }}
+      share: {{ .Values.volumes.results.share }}
+      {{- with .Values.volumes.results.subDir }}
+      subDir: {{ . }}
+      {{- end }}
+{{- end }}
+---
+{{- $pvcexists := lookup "v1" "PersistentVolumeClaim" .Release.Namespace "geoquery-results" }}
+{{- if not $pvcexists }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: geoquery-results
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ .Values.volumes.results.size }}
+  volumeName: geoquery-results
+  storageClassName: {{ .Values.volumes.results.storageClassName }}
+{{- end }}

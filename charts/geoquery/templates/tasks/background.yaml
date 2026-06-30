@@ -96,6 +96,11 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: geoquery-results
+              mountPath: /results
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: geoquery-results
+          persistentVolumeClaim:
+            claimName: geoquery-results
