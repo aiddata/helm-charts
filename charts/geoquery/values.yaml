@@ -136,6 +136,11 @@ django:
   # TLS-terminating proxy (Cloudflare Tunnel). Each must include the scheme,
   # e.g. "https://geoquery.org". Required for admin login POSTs. Empty disables.
   csrfTrustedOrigins: ""
+  # Public base URL of the deployment, including scheme (no trailing slash).
+  # Used by the backend to build absolute links (e.g. result downloads and
+  # links back to the frontend). Populates DOWNLOAD_BASE_URL and
+  # FRONTEND_BASE_URL.
+  baseUrl: "https://geoquery.org"
 
 geoquery:
   directories: "false"

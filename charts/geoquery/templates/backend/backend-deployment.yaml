@@ -42,6 +42,10 @@ spec:
             - name: DJANGO_CSRF_TRUSTED_ORIGINS
               value: {{ .Values.django.csrfTrustedOrigins | quote }}
             {{- end }}
+            - name: DOWNLOAD_BASE_URL
+              value: {{ .Values.django.baseUrl | quote }}
+            - name: FRONTEND_BASE_URL
+              value: {{ .Values.django.baseUrl | quote }}
             - name: PG_HOST
               valueFrom:
                 secretKeyRef:
