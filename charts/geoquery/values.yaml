@@ -217,6 +217,14 @@ metrics:
       matchLabels:
         app.kubernetes.io/name: prometheus
 
+  # Database (CloudNativePG) metrics.
+  # When enabled, the CNPG operator creates a PodMonitor for the database
+  # cluster so Prometheus can scrape the PostgreSQL metrics endpoint (port 9187).
+  # Requires the Prometheus Operator CRDs (monitoring.coreos.com) to be installed,
+  # and the master metrics.enabled switch above to be true.
+  podMonitor:
+    enabled: true
+
   serviceMonitor:
     enabled: true
     namespace: "" # Empty = same namespace as app

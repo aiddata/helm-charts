@@ -68,6 +68,12 @@ metadata:
 spec:
   instances: {{ .Values.database.replicas }}
   imageName: ghcr.io/cloudnative-pg/postgis:17
+  {{- if and .Values.metrics.enabled .Values.metrics.podMonitor.enabled }}
+  monitoring:
+    # Have the CNPG operator create a PodMonitor for the database cluster so
+    # Prometheus scrapes the PostgreSQL metrics endpoint (port 9187).
+    enablePodMonitor: true
+  {{- end }}
   {{- if .Values.database.recover.enabled }}
   bootstrap:
     recovery:
