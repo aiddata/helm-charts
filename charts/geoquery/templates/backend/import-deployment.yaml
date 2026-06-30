@@ -38,6 +38,10 @@ spec:
               value: "{{ .Values.django.debug }}"
             - name: EMAIL_PASSWORD
               value: {{ .Values.django.emailPassword | quote }}
+            - name: DOWNLOAD_BASE_URL
+              value: {{ .Values.django.baseUrl | quote }}
+            - name: FRONTEND_BASE_URL
+              value: {{ .Values.django.baseUrl | quote }}
             - name: PG_HOST
               valueFrom:
                 secretKeyRef:
