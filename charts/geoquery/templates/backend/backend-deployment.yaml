@@ -110,7 +110,7 @@ spec:
             - name: http
               containerPort: 8000
             - name: metrics
-              containerPort: 9090
+              containerPort: 9091
       volumes:
         - name: tmp
           emptyDir: {}

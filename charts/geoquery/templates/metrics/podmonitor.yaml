@@ -1,0 +1,30 @@
+{{- if .Values.metrics.enabled }}
+{{- if .Values.metrics.podMonitor.enabled }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-backend
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: geoquery-backend
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    # django-prometheus exports metrics on a dedicated port (9091, named
+    # "metrics"), separate from the port the app serves on.
+    - port: metrics
+      path: {{ .Values.metrics.path }}
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+{{- end }}
+{{- end }}
+{{- end }}

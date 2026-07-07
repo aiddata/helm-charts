@@ -50,7 +50,7 @@ spec:
     {{- end }}
     {{- /* type "none" has no ingress rules - traffic is blocked */}}
     {{- if .Values.metrics.enabled }}
-    # Allow Prometheus to scrape metrics
+    # Allow Prometheus to scrape the django-prometheus metrics port
     - from:
         - namespaceSelector:
             {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
@@ -58,7 +58,7 @@ spec:
             {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
       ports:
         - protocol: TCP
-          port: 9090
+          port: 9091
     {{- end }}
   egress:
     # Allow DNS resolution

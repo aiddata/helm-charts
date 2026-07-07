@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:81e7bf7
+  image: ghcr.io/aiddata/geoquery-frontend:95acb69
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:63e74f3
+  image: ghcr.io/aiddata/geoquery-backend:95acb69
   replicaCount: 1
 
 # Exposure configuration (how the app is exposed externally)
@@ -211,6 +211,19 @@ metrics:
   enabled: false
   path: "/metrics"
 
+  # PodMonitor resources. Requires the Prometheus Operator CRDs
+  # (monitoring.coreos.com) to be installed, and the master metrics.enabled
+  # switch above to be true. When enabled:
+  #   - a PodMonitor is created for the backend pods so Prometheus scrapes
+  #     the django-prometheus endpoint on the dedicated metrics port (9091)
+  #   - the CNPG operator creates a PodMonitor for the database cluster so
+  #     Prometheus can scrape the PostgreSQL metrics endpoint (port 9187)
+  podMonitor:
+    enabled: true
+    interval: "30s"
+    scrapeTimeout: "10s"
+    labels: {}
+
   grafanaDashboard:
     title: "Yesterdays"
 
@@ -221,21 +234,6 @@ metrics:
     podSelector:
       matchLabels:
         app.kubernetes.io/name: prometheus
-
-  # Database (CloudNativePG) metrics.
-  # When enabled, the CNPG operator creates a PodMonitor for the database
-  # cluster so Prometheus can scrape the PostgreSQL metrics endpoint (port 9187).
-  # Requires the Prometheus Operator CRDs (monitoring.coreos.com) to be installed,
-  # and the master metrics.enabled switch above to be true.
-  podMonitor:
-    enabled: true
-
-  serviceMonitor:
-    enabled: true
-    namespace: "" # Empty = same namespace as app
-    interval: "30s"
-    scrapeTimeout: "10s"
-    labels: {}
 
   prometheusRule:
     enabled: false # Enable when you want alerting
