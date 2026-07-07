@@ -1,4 +1,4 @@
-{{- $pvname := "geoquery-results" }}
+{{- $pvname := printf "%s-results" .Release.Namespace }}
 {{- $pvexists := lookup "v1" "PersistentVolume" "" $pvname }}
 {{- if not $pvexists -}}
 apiVersion: v1
@@ -22,9 +22,10 @@ spec:
     {{- toYaml .Values.volumes.results.mountOptions | nindent 4 }}
   csi:
     driver: nfs.csi.k8s.io
-    # volumeHandle format: {nfs-server-address}#{share-name}#{sub-dir-name}
-    # make sure this value is unique for every share in the cluster
-    volumeHandle: {{ printf "%s#%s#%s" .Values.volumes.results.server .Values.volumes.results.share .Values.volumes.results.subDir }}
+    # volumeHandle format: {nfs-server-address}#{share-name}#{sub-dir-name}#{uniquifier}
+    # make sure this value is unique for every share in the cluster;
+    # the namespace suffix keeps it unique across releases mounting the same share
+    volumeHandle: {{ printf "%s#%s#%s#%s" .Values.volumes.results.server .Values.volumes.results.share .Values.volumes.results.subDir .Release.Namespace }}
     volumeAttributes:
       server: {{ .Values.volumes.results.server }}
       share: {{ .Values.volumes.results.share }}
@@ -47,6 +48,6 @@ spec:
   resources:
     requests:
       storage: {{ .Values.volumes.results.size }}
-  volumeName: geoquery-results
+  volumeName: {{ $pvname }}
   storageClassName: {{ .Values.volumes.results.storageClassName }}
 {{- end }}
