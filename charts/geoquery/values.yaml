@@ -216,8 +216,8 @@ metrics:
   # switch above to be true. When enabled:
   #   - a PodMonitor is created for the backend pods so Prometheus scrapes
   #     the django-prometheus endpoint on the dedicated metrics port (9091)
-  #   - the CNPG operator creates a PodMonitor for the database cluster so
-  #     Prometheus can scrape the PostgreSQL metrics endpoint (port 9187)
+  #   - a PodMonitor is created for the database cluster so Prometheus can
+  #     scrape the PostgreSQL metrics endpoint (port 9187)
   podMonitor:
     enabled: true
     interval: "30s"
