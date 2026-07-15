@@ -2,9 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: background-worker
-  namespace: {{ .Release.Namespace }}
+  namespace: { { .Release.Namespace } }
 spec:
-  replicas: {{ .Values.tasks.background.replicaCount }}
+  replicas: { { .Values.tasks.background.replicaCount } }
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -25,7 +25,7 @@ spec:
         runAsGroup: 1000
       containers:
         - name: celery-worker
-          image: {{ .Values.backend.image }}
+          image: { { .Values.backend.image } }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -43,17 +43,17 @@ spec:
             - "--max-tasks-per-child=100"
           env:
             - name: DJANGO_TIME_ZONE
-              value: {{ .Values.django.timeZone }}
+              value: { { .Values.django.timeZone } }
             - name: DJANGO_SECRET_KEY
-              value: {{ .Values.django.secretKey }}
+              value: { { .Values.django.secretKey } }
             - name: DJANGO_ALLOWED_HOSTS
-              value: {{ .Values.django.allowedHosts }}
+              value: { { .Values.django.allowedHosts } }
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
             - name: DOWNLOAD_BASE_URL
-              value: {{ .Values.django.baseUrl | quote }}
+              value: { { .Values.django.baseUrl | quote } }
             - name: FRONTEND_BASE_URL
-              value: {{ .Values.django.baseUrl | quote }}
+              value: { { .Values.django.baseUrl | quote } }
             - name: PG_HOST
               valueFrom:
                 secretKeyRef:
@@ -80,7 +80,7 @@ spec:
                   name: geoquery-db-app
                   key: password
             - name: PROTOMAPS_API_KEY
-              value: {{ .Values.protomaps.key }}
+              value: { { .Values.protomaps.key } }
             - name: RABBITMQ_HOST
               value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
             - name: RABBITMQ_PORT
@@ -100,11 +100,11 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: geoquery-results
-              mountPath: /results
+            - name: geoquery-requests
+              mountPath: /requests
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: geoquery-results
+        - name: geoquery-requests
           persistentVolumeClaim:
-            claimName: geoquery-results
+            claimName: geoquery-requests

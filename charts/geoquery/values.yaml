@@ -153,19 +153,19 @@ volumes:
     size: 100Gi
     # NFS server hostname/address and the exported share path
     server: 128.239.59.130
-    share: /sciclone/nova/REU/geo/data
+    share: <SHARE PATH>
     # Optional sub-directory under the share to mount (empty = share root)
     subDir: ""
     mountOptions:
       - ro
       - hard
       - nfsvers=4.1
-  # geoquery-results: read-write NFS pool for generated query results
-  results:
+  # geoquery-requests: read-write NFS pool for generated query results
+  requests:
     storageClassName: nfs-csi
     size: 100Gi
     server: 128.239.59.130
-    share: /sciclone/nova/test/results
+    share: <SHARE PATH>
     subDir: ""
     mountOptions:
       - hard

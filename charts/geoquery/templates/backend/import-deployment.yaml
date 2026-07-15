@@ -102,8 +102,8 @@ spec:
             - name: geoquery-data
               mountPath: /data
               readOnly: true
-            - name: geoquery-results
-              mountPath: /results
+            - name: geoquery-requests
+              mountPath: /requests
       volumes:
         - name: tmp
           emptyDir: {}
@@ -111,6 +111,6 @@ spec:
           persistentVolumeClaim:
             claimName: geoquery-data
             readOnly: true
-        - name: geoquery-results
+        - name: geoquery-requests
           persistentVolumeClaim:
-            claimName: geoquery-results
+            claimName: geoquery-requests

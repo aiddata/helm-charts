@@ -103,8 +103,8 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: geoquery-results
-              mountPath: /results
+            - name: geoquery-requests
+              mountPath: /requests
               readOnly: true
           ports:
             - name: http
@@ -114,7 +114,7 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: geoquery-results
+        - name: geoquery-requests
           persistentVolumeClaim:
-            claimName: geoquery-results
+            claimName: geoquery-requests
             readOnly: true
