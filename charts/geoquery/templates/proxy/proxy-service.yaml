@@ -1,0 +1,17 @@
+{{- if .Values.proxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: geoquery-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery
+spec:
+  type: ClusterIP
+  selector:
+    app: geoquery-proxy
+  ports:
+    - name: http
+      port: 80
+      targetPort: {{ .Values.proxy.containerPort }}
+{{- end }}

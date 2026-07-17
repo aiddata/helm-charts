@@ -6,6 +6,36 @@ backend:
   image: ghcr.io/aiddata/geoquery-backend:95acb69
   replicaCount: 1
 
+# Reverse proxy that fronts the app. It is the single service external
+# traffic (see exposure below) is routed to, and it forwards each request to
+# either the frontend (UI) or the backend (API/admin) based on the path.
+proxy:
+  enabled: true
+  image: nginxinc/nginx-unprivileged:1.27-alpine
+  replicaCount: 2
+  # Port nginx listens on inside the container. Must be >1024 so the
+  # non-root container can bind it.
+  containerPort: 8080
+  # Maximum request body size; lets large uploads/downloads stream through.
+  maxBodySize: "100m"
+  # Path prefixes routed to the backend service. Every request whose path
+  # does not start with one of these is served by the frontend. Adjust to
+  # match your app's URL layout — e.g. add "/static/" and "/media/" if the
+  # backend serves the Django admin's assets.
+  backendPaths:
+    - /admin/
+    - /api/
+    - /data/
+    - /static/
+    - /stats/
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi
+
 # Exposure configuration (how the app is exposed externally)
 # type: "none" | "ingress" | "gateway" | "custom"
 #   - none: No ingress resources created, no external traffic allowed

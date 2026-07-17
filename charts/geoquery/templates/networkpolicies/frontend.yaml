@@ -15,6 +15,18 @@ spec:
     - Ingress
     - Egress
   ingress:
+    {{- if .Values.proxy.enabled }}
+    # Traffic reaches the frontend only via the reverse proxy, which is the
+    # single external entry point (see proxy-network-policy for the exposure
+    # source rules).
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-proxy
+      ports:
+        - protocol: TCP
+          port: 3000
+    {{- else }}
     # Allow traffic from gateway/ingress controller based on exposure.type
     {{- if eq .Values.exposure.type "gateway" }}
     - from:
@@ -49,6 +61,7 @@ spec:
     {{- end }}
     {{- end }}
     {{- /* type "none" has no ingress rules - traffic is blocked */}}
+    {{- end }}
     {{- if .Values.metrics.enabled }}
     # Allow Prometheus to scrape metrics
     - from:

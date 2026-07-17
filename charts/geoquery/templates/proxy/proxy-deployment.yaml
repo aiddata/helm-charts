@@ -1,0 +1,63 @@
+{{- if .Values.proxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geoquery-proxy
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.proxy.replicaCount }}
+  selector:
+    matchLabels:
+      app: geoquery-proxy
+  template:
+    metadata:
+      labels:
+        app: geoquery-proxy
+      annotations:
+        # Roll the pods whenever the routing config changes.
+        checksum/config: {{ include (print $.Template.BasePath "/proxy/proxy-configmap.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: nginx
+          image: {{ .Values.proxy.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.proxy.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.proxy.containerPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.proxy.containerPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - name: http
+              containerPort: {{ .Values.proxy.containerPort }}
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: geoquery-proxy-config
+        - name: tmp
+          emptyDir: {}
+{{- end }}

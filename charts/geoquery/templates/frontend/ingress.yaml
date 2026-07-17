@@ -1,4 +1,7 @@
 {{- if eq .Values.exposure.type "ingress" }}
+{{- /* Route external traffic to the reverse proxy when enabled, otherwise
+       fall back to the frontend service directly. */}}
+{{- $service := ternary "geoquery-proxy" "geoquery" .Values.proxy.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -26,7 +29,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: geoquery
+                name: {{ $service }}
                 port:
                   number: 80
           {{- end }}
