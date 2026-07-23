@@ -67,7 +67,7 @@ metadata:
     "helm.sh/hook": pre-install
 spec:
   instances: {{ .Values.database.replicas }}
-  imageName: ghcr.io/cloudnative-pg/postgis:17
+  imageName: ghcr.io/cloudnative-pg/postgis:18
   {{- if .Values.database.recover.enabled }}
   bootstrap:
     recovery:
