@@ -12,7 +12,7 @@ spec:
     # Not enforced for NFS — only used for PV/PVC binding (must be >= the PVC request)
     storage: {{ .Values.volumes.data.size }}
   accessModes:
-    - ReadOnlyMany
+    - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: {{ .Values.volumes.data.storageClassName }}
   claimRef:
@@ -44,7 +44,7 @@ metadata:
     "helm.sh/resource-policy": keep
 spec:
   accessModes:
-    - ReadOnlyMany
+    - ReadWriteMany
   resources:
     requests:
       storage: {{ .Values.volumes.data.size }}
