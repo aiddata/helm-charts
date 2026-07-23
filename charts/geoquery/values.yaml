@@ -5,6 +5,10 @@ frontend:
 backend:
   image: ghcr.io/aiddata/geoquery-backend:f295074
   replicaCount: 1
+  # import.runAsUser / import.runAsGroup: optional overrides for the pod
+  # securityContext of the geoquery-import deployment (defaults to 1000/1000
+  # if unset). Useful when the mounted NFS volumes require a specific UID/GID.
+  import: {}
 
 # Reverse proxy that fronts the app. It is the single service external
 # traffic (see exposure below) is routed to, and it forwards each request to
