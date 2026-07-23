@@ -110,7 +110,7 @@ spec:
         - name: geoquery-data
           persistentVolumeClaim:
             claimName: geoquery-data
-            readOnly: true
+            readOnly: false
         - name: geoquery-requests
           persistentVolumeClaim:
             claimName: geoquery-requests
