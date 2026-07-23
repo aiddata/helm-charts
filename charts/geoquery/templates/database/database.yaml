@@ -67,7 +67,7 @@ metadata:
     "helm.sh/hook": pre-install
 spec:
   instances: {{ .Values.database.replicas }}
-  imageName: ghcr.io/cloudnative-pg/postgis:18
+  imageName: ghcr.io/cloudnative-pg/postgis:17.10-3.6.4-202607201104-system-trixie
   {{- if .Values.database.recover.enabled }}
   bootstrap:
     recovery:
