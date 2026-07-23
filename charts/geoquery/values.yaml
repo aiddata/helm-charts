@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:95acb69
+  image: ghcr.io/aiddata/geoquery-frontend:f50b402
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:95acb69
+  image: ghcr.io/aiddata/geoquery-backend:f50b402
   replicaCount: 1
 
 # Reverse proxy that fronts the app. It is the single service external
