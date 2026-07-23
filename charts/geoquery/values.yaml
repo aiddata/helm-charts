@@ -187,7 +187,6 @@ volumes:
     # Optional sub-directory under the share to mount (empty = share root)
     subDir: ""
     mountOptions:
-      - ro
       - hard
       - nfsvers=4.1
   # geoquery-requests: read-write NFS pool for generated query results
