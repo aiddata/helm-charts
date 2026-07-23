@@ -4,8 +4,6 @@ kind: ObjectStore
 metadata:
   name: {{ .Values.database.backup.objectStoreName }}
   namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/hook": pre-install
 spec:
   configuration:
     destinationPath: {{ .Values.database.backup.s3Credentials.destinationPath }}
@@ -43,6 +41,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   configuration:
     destinationPath: {{ .Values.database.recover.s3Credentials.destinationPath }}
