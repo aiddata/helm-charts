@@ -63,8 +63,6 @@ kind: Cluster
 metadata:
   name: geoquery-db
   namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/hook": pre-install
 spec:
   instances: {{ .Values.database.replicas }}
   imageName: ghcr.io/cloudnative-pg/postgis:17.10-3.6.4-202607201104-system-trixie
