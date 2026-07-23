@@ -101,7 +101,7 @@ spec:
               mountPath: /tmp
             - name: geoquery-data
               mountPath: /data
-              readOnly: true
+              readOnly: false
             - name: geoquery-requests
               mountPath: /requests
       volumes:
