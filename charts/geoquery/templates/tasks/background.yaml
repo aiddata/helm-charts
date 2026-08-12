@@ -40,7 +40,10 @@ spec:
             - "--loglevel=info"
             - "-Q"
             - "background"
+            - "--concurrency={{ .Values.tasks.background.concurrency }}"
             - "--max-tasks-per-child=100"
+          resources:
+            {{- toYaml .Values.tasks.background.resources | nindent 12 }}
           env:
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}

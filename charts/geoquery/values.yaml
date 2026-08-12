@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:9fdf389
+  image: ghcr.io/aiddata/geoquery-frontend:f5862cc
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:9fdf389
+  image: ghcr.io/aiddata/geoquery-backend:7ae95a6
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment (defaults to 1000/1000
@@ -146,6 +146,17 @@ networkPolicies:
 tasks:
   background:
     replicaCount: 3
+    # Celery prefork pool size. Without an explicit value Celery defaults to
+    # one process per CPU core, which on large nodes forks dozens of
+    # Django-loaded processes and multiplies idle memory accordingly.
+    concurrency: 4
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
   processing:
     replicaCount: 3
   beat:
