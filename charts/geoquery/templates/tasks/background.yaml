@@ -56,27 +56,31 @@ spec:
               value: {{ .Values.django.baseUrl | quote }}
             - name: REQUESTS_DIR
               value: "/requests"
-            - name: PG_HOST
+            - name: PG_RW_HOST
+              {{- if .Values.database.pooler.enabled }}
+              value: geoquery-db-pooler-rw
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: host
-            - name: PG_DBNAME
+              {{- end }}
+            - name: PG_RW_DBNAME
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: dbname
-            - name: PG_PORT
+            - name: PG_RW_PORT
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: port
-            - name: PG_USER
+            - name: PG_RW_USER
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: username
-            - name: PG_PASSWORD
+            - name: PG_RW_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app

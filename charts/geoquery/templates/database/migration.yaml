@@ -70,27 +70,30 @@ spec:
               value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
-            - name: PG_HOST
+            # Deliberately bypasses the PgBouncer pooler: this Job is a
+            # pre-install hook, so on a fresh install it runs before the Pooler
+            # exists, and DDL shouldn't go through a transaction pool anyway.
+            - name: PG_RW_HOST
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: host
-            - name: PG_DBNAME
+            - name: PG_RW_DBNAME
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: dbname
-            - name: PG_PORT
+            - name: PG_RW_PORT
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: port
-            - name: PG_USER
+            - name: PG_RW_USER
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: username
-            - name: PG_PASSWORD
+            - name: PG_RW_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app

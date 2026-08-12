@@ -15,14 +15,21 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow connections from frontend
+    {{- if .Values.database.pooler.enabled }}
+    # Allow connections from the PgBouncer poolers
     - from:
         - podSelector:
             matchLabels:
-              app: geoquery-frontend
+              cnpg.io/poolerName: geoquery-db-pooler-rw
+        {{- if .Values.database.pooler.ro.enabled }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: geoquery-db-pooler-ro
+        {{- end }}
       ports:
         - protocol: TCP
           port: 5432
+    {{- end }}
     # Allow connections from background workers
     - from:
         - podSelector:

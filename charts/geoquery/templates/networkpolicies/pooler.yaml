@@ -1,0 +1,183 @@
+{{- if and .Values.networkPolicies.enabled .Values.database.pooler.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pooler-rw-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-rw
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow connections from every workload that talks to the primary
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-backend
+        - podSelector:
+            matchLabels:
+              app: geoquery-import
+        - podSelector:
+            matchLabels:
+              app: geoquery-background-worker
+        - podSelector:
+            matchLabels:
+              app: geoquery-processing-worker
+        - podSelector:
+            matchLabels:
+              app: geoquery-celery-beat
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus to scrape PgBouncer metrics
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9127
+    {{- end }}
+    # Allow CNPG operator communication
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kubernetes API server access (the CNPG instance manager in the
+    # pooler pod watches its own Pooler resource)
+    # Uses the actual endpoint IP (not ClusterIP) since ipBlock is evaluated post-DNAT
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.kubeApiServer.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicies.kubeApiServer.port }}
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow CNPG operator communication
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- if .Values.database.pooler.ro.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pooler-ro-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-ro
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only the backend sends read-only queries to the replicas
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-backend
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus to scrape PgBouncer metrics
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9127
+    {{- end }}
+    # Allow CNPG operator communication
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kubernetes API server access (the CNPG instance manager in the
+    # pooler pod watches its own Pooler resource)
+    # Uses the actual endpoint IP (not ClusterIP) since ipBlock is evaluated post-DNAT
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.kubeApiServer.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicies.kubeApiServer.port }}
+    # Allow connection to PostgreSQL (the label covers replicas too)
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow CNPG operator communication
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
+{{- end }}

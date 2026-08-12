@@ -1,0 +1,29 @@
+{{- if .Values.database.pooler.enabled }}
+{{- if gt (int .Values.database.pooler.rw.instances) 1 }}
+# The Pooler CRD exposes no PDB field, so we manage one ourselves - otherwise a
+# node drain could evict every PgBouncer pod at once and take the app offline.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: geoquery-db-pooler-rw
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-rw
+{{- end }}
+{{- if and .Values.database.pooler.ro.enabled (gt (int .Values.database.pooler.ro.instances) 1) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: geoquery-db-pooler-ro
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-ro
+{{- end }}
+{{- end }}

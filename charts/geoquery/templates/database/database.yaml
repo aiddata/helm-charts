@@ -65,6 +65,16 @@ metadata:
 spec:
   instances: {{ .Values.database.replicas }}
   imageName: ghcr.io/cloudnative-pg/postgis:17.10-3.6.4-202607201104-system-trixie
+  postgresql:
+    parameters:
+      # Keep long read-only queries on the replicas (served by the ro pooler)
+      # from being cancelled with "conflict with recovery" during WAL replay
+      hot_standby_feedback: "on"
+      max_standby_streaming_delay: "30s"
+      # Django (USE_TZ) expects "UTC"; the default "Etc/UTC" doesn't string-match,
+      # so Django issues a SET TIME ZONE on every new connection. Under
+      # transaction pooling that's a wasted round trip per request.
+      timezone: "UTC"
   {{- if .Values.database.recover.enabled }}
   bootstrap:
     recovery:

@@ -42,6 +42,11 @@ spec:
         - podSelector:
             matchLabels:
               cnpg.io/cluster: geoquery-db
+        {{- if .Values.database.pooler.enabled }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: geoquery-db-pooler-rw
+        {{- end }}
       ports:
         - protocol: TCP
           port: 5432

@@ -1,0 +1,53 @@
+{{- if .Values.metrics.enabled }}
+{{- if .Values.metrics.podMonitor.enabled }}
+{{- if .Values.database.pooler.enabled }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-db-pooler-rw
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-db-pooler
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-rw
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+{{- if .Values.database.pooler.ro.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-db-pooler-ro
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-db-pooler
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-ro
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

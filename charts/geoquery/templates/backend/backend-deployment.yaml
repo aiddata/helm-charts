@@ -48,27 +48,62 @@ spec:
               value: {{ .Values.django.baseUrl | quote }}
             - name: REQUESTS_DIR
               value: "/requests"
-            - name: PG_HOST
+            - name: PG_RW_HOST
+              {{- if .Values.database.pooler.enabled }}
+              value: geoquery-db-pooler-rw
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: host
-            - name: PG_DBNAME
+              {{- end }}
+            - name: PG_RW_DBNAME
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: dbname
-            - name: PG_PORT
+            - name: PG_RW_PORT
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: port
-            - name: PG_USER
+            - name: PG_RW_USER
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: username
-            - name: PG_PASSWORD
+            - name: PG_RW_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: password
+            # Read-only replica target. Falls back to the primary when the ro
+            # pooler is disabled, so reads simply go where they always did.
+            - name: PG_RO_HOST
+              {{- if and .Values.database.pooler.enabled .Values.database.pooler.ro.enabled }}
+              value: geoquery-db-pooler-ro
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: host
+              {{- end }}
+            - name: PG_RO_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: dbname
+            - name: PG_RO_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: port
+            - name: PG_RO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: username
+            - name: PG_RO_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: geoquery-db-app

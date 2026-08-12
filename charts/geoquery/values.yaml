@@ -209,6 +209,41 @@ database:
   storage:
     storageClass: nfs-csi
     size: 50Gi
+  # PgBouncer connection poolers (CloudNativePG Pooler CRD).
+  # rw fronts the primary and serves every workload except the migration Job.
+  # ro fronts the replicas and serves read-only queries from the backend, so
+  # website reads don't compete with writes from the processing tasks.
+  pooler:
+    enabled: true
+    # session | transaction. transaction multiplexes best but requires
+    # DISABLE_SERVER_SIDE_CURSORS in the backend's Django settings.
+    poolMode: transaction
+    parameters:
+      # Client-side connection ceiling, per pooler pod.
+      max_client_conn: "500"
+      # Server connections per pool, per pooler pod. Total connections to the
+      # primary is roughly rw.instances * default_pool_size, which must stay
+      # well under PostgreSQL's max_connections (100 by default).
+      default_pool_size: "20"
+      # Inert today (the backend uses psycopg2, which never prepares
+      # server-side), but required if the backend ever moves to psycopg 3.
+      max_prepared_statements: "100"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    rw:
+      instances: 2
+    ro:
+      # Requires database.replicas > 1 — the geoquery-db-ro service selects
+      # replicas only and has no endpoints on a single-instance cluster.
+      # Replication is asynchronous, so reads here may be slightly stale;
+      # the backend's database router decides what is safe to send.
+      enabled: true
+      instances: 2
   backup:
     enabled: false
     schedule: "0 0 0,12 * * *"
@@ -251,6 +286,8 @@ metrics:
   #     the django-prometheus endpoint on the dedicated metrics port (9091)
   #   - a PodMonitor is created for the database cluster so Prometheus can
   #     scrape the PostgreSQL metrics endpoint (port 9187)
+  #   - a PodMonitor is created for each enabled PgBouncer pooler so Prometheus
+  #     can scrape the cnpg_pgbouncer_* metrics endpoint (port 9127)
   podMonitor:
     enabled: true
     interval: "30s"
