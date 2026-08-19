@@ -15,8 +15,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: {{ .Values.volumes.requests.runAsUser | default 1000 }}
+        runAsGroup: {{ .Values.volumes.requests.runAsGroup | default 1000 }}
       containers:
         - name: django
           image: {{ .Values.backend.image }}
@@ -107,7 +107,6 @@ spec:
               mountPath: /tmp
             - name: geoquery-requests
               mountPath: /requests
-              readOnly: true
           ports:
             - name: http
               containerPort: 8000
@@ -119,4 +118,3 @@ spec:
         - name: geoquery-requests
           persistentVolumeClaim:
             claimName: geoquery-requests
-            readOnly: true

@@ -21,8 +21,8 @@ spec:
       terminationGracePeriodSeconds: 300
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: {{ .Values.volumes.requests.runAsUser | default 1000 }}
+        runAsGroup: {{ .Values.volumes.requests.runAsGroup | default 1000 }}
       containers:
         - name: celery-worker
           image: {{ .Values.backend.image }}
