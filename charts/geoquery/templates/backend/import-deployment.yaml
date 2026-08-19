@@ -15,8 +15,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: {{ .Values.backend.import.runAsUser | default 1000 }}
-        runAsGroup: {{ .Values.backend.import.runAsGroup | default 1000 }}
+        runAsUser: {{ .Values.backend.import.runAsUser | default .Values.volumes.requests.runAsUser | default 1000 }}
+        runAsGroup: {{ .Values.backend.import.runAsGroup | default .Values.volumes.requests.runAsGroup | default 1000 }}
       containers:
         - name: django
           image: {{ .Values.backend.image }}

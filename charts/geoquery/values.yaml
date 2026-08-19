@@ -1,13 +1,23 @@
 frontend:
+<<<<<<< HEAD
   image: ghcr.io/aiddata/geoquery-frontend:f5862cc
   replicaCount: 1
 
 backend:
   image: ghcr.io/aiddata/geoquery-backend:7ae95a6
+=======
+  image: ghcr.io/aiddata/geoquery-frontend:84bc952
+  replicaCount: 1
+
+backend:
+  image: ghcr.io/aiddata/geoquery-backend:84bc952
+>>>>>>> release-0.12
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
-  # securityContext of the geoquery-import deployment (defaults to 1000/1000
-  # if unset). Useful when the mounted NFS volumes require a specific UID/GID.
+  # securityContext of the geoquery-import deployment. Defaults to
+  # volumes.requests.runAsUser / runAsGroup. Set these only when the import
+  # pod needs a different UID/GID than the other pods mounting the shares,
+  # e.g. when the data and requests shares are owned by different users.
   import: {}
 
 # Reverse proxy that fronts the app. It is the single service external
@@ -214,6 +224,12 @@ volumes:
     mountOptions:
       - hard
       - nfsvers=4.1
+    # UID/GID that owns the share on the NFS server. Every pod mounting
+    # /requests (backend, background worker, import) runs as this user:
+    # ownership on NFS is enforced by the server and fsGroup does not apply
+    # to it, so a pod whose UID does not match cannot write results.
+    runAsUser: 1000
+    runAsGroup: 1000
 
 database:
   replicas: 3
