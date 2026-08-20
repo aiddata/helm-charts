@@ -1,0 +1,32 @@
+{{- if .Values.metrics.enabled }}
+{{- if .Values.metrics.grafanaDashboard.enabled }}
+{{- $ns := .Release.Namespace }}
+{{- $uid := .Values.metrics.grafanaDashboard.uid | default (printf "geoquery-%s" $ns) }}
+{{- $title := .Values.metrics.grafanaDashboard.title | default (printf "GeoQuery (%s)" $ns) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-geoquery-dashboard
+  namespace: {{ .Values.metrics.grafanaDashboard.namespace | default .Release.Namespace }}
+  labels:
+    # The Grafana sidecar discovers dashboards by this label, not by namespace.
+    {{- $label := .Values.metrics.grafanaDashboard.label }}
+    {{ $label.key }}: {{ $label.value | quote }}
+    {{- with .Values.metrics.grafanaDashboard.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  # dashboards/geoquery.json is a plain, unmodified Grafana export — no Helm
+  # templating inside it — so it can be round-tripped through the Grafana UI.
+  # Only three placeholders are substituted, all of them metadata: the dashboard
+  # identity (uid/title) and the default value of the `namespace` template
+  # variable. Every panel query filters on $namespace, so none of them need
+  # rewriting here.
+  geoquery.json: |-
+{{ .Files.Get "dashboards/geoquery.json"
+     | replace "PLACEHOLDER_NAMESPACE" $ns
+     | replace "PLACEHOLDER_TITLE" $title
+     | replace "PLACEHOLDER_UID" $uid
+     | indent 4 }}
+{{- end }}
+{{- end }}

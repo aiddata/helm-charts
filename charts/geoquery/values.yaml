@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:84bc952
+  image: ghcr.io/aiddata/geoquery-frontend:0451251
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:9aa3578
+  image: ghcr.io/aiddata/geoquery-backend:7d31475
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -313,8 +313,32 @@ metrics:
     scrapeTimeout: "10s"
     labels: {}
 
+  # Ships charts/geoquery/dashboards/geoquery.json as a ConfigMap for the
+  # Grafana sidecar to pick up. Requires metrics.enabled above. The dashboard
+  # reads the same django-prometheus series the backend PodMonitor scrapes, so
+  # it is only useful where that PodMonitor is also running.
   grafanaDashboard:
-    title: "Yesterdays"
+    enabled: true
+
+    # Dashboard identity. Both default to being namespace-scoped so that
+    # installing the chart into staging and production yields two separate
+    # dashboards rather than two releases fighting over one uid.
+    #   uid   -> "geoquery-<namespace>"
+    #   title -> "GeoQuery (<namespace>)"
+    uid: ""
+    title: ""
+
+    # Label the Grafana sidecar watches for. Match this to the sidecar's
+    # `sidecar.dashboards.label` / `labelValue` settings.
+    label:
+      key: grafana_dashboard
+      value: "1"
+    extraLabels: {}
+
+    # Where to create the ConfigMap. Empty means the release namespace, which is
+    # right when the sidecar watches all namespaces (the kube-prometheus-stack
+    # default). Set this to the Grafana namespace if the sidecar is scoped.
+    namespace: ""
 
   networkPolicy:
     namespaceSelector:
