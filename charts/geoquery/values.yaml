@@ -28,11 +28,17 @@ proxy:
   # does not start with one of these is served by the frontend. Adjust to
   # match your app's URL layout — e.g. add "/static/" and "/media/" if the
   # backend serves the Django admin's assets.
+  # Regex patterns routed to the backend. Evaluated before backendPaths
+  # prefix matches; use for paths that share a prefix with frontend routes
+  # but need backend routing only for deeper sub-paths.
+  regexBackendPaths:
+    # Route result files (e.g. /requests/{uuid}/file.zip) to the backend
+    # while leaving the frontend page (/requests/{uuid}/) on the frontend.
+    - "^/requests/[^/]+/.+"
   backendPaths:
     - /admin/
     - /api/
     - /data/
-    - /requests/
     - /static/
     - /stats/
   resources:

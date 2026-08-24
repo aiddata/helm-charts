@@ -85,6 +85,16 @@ data:
           return 200 "ok\n";
         }
 
+        # Regex-matched paths routed to the backend. Evaluated before prefix
+        # locations; used for paths that share a prefix with frontend routes
+        # but need backend routing for sub-paths with files (e.g. result
+        # downloads under /requests/{uuid}/{file}).
+        {{- range .Values.proxy.regexBackendPaths }}
+        location ~ {{ . }} {
+          proxy_pass http://backend;
+        }
+        {{- end }}
+
         # Backend-routed path prefixes (API, admin, and anything else the
         # backend owns). Everything not listed here falls through to the
         # frontend.
