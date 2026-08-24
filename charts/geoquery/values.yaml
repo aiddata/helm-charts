@@ -32,6 +32,7 @@ proxy:
     - /admin/
     - /api/
     - /data/
+    - /requests/
     - /static/
     - /stats/
   resources:
@@ -177,6 +178,7 @@ django:
   timeZone: "UTC"
   secretKey: <DJANGO SECRET KEY>
   emailPassword: <EMAIL PASSWORD>
+  githubGistToken: ""
   debug: "false"
   allowedHosts: <ALLOWED HOSTS>
   # Comma-separated origins Django trusts for unsafe (POST) requests behind the

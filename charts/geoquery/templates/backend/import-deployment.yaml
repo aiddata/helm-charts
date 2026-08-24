@@ -38,6 +38,8 @@ spec:
               value: "{{ .Values.django.debug }}"
             - name: EMAIL_PASSWORD
               value: {{ .Values.django.emailPassword | quote }}
+            - name: GITHUB_GIST_TOKEN
+              value: {{ .Values.django.githubGistToken | quote }}
             - name: DOWNLOAD_BASE_URL
               value: {{ .Values.django.baseUrl | quote }}
             - name: FRONTEND_BASE_URL

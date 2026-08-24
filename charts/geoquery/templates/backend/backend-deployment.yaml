@@ -38,6 +38,8 @@ spec:
               value: "{{ .Values.django.debug }}"
             - name: EMAIL_PASSWORD
               value: {{ .Values.django.emailPassword | quote }}
+            - name: GITHUB_GIST_TOKEN
+              value: {{ .Values.django.githubGistToken | quote }}
             {{- if .Values.django.csrfTrustedOrigins }}
             - name: DJANGO_CSRF_TRUSTED_ORIGINS
               value: {{ .Values.django.csrfTrustedOrigins | quote }}
