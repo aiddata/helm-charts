@@ -40,8 +40,7 @@ spec:
           env:
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
-            - name: DJANGO_SECRET_KEY
-              value: {{ .Values.django.secretKey }}
+            {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
             - name: DJANGO_ALLOWED_HOSTS
               value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG

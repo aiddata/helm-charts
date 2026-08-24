@@ -64,8 +64,7 @@ spec:
           command:
             ["/app/.venv/bin/python", "manage.py", "migrate"]
           env:
-            - name: DJANGO_SECRET_KEY
-              value: {{ .Values.django.secretKey }}
+            {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
             - name: DJANGO_ALLOWED_HOSTS
               value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG

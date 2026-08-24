@@ -30,16 +30,13 @@ spec:
           env:
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
-            - name: DJANGO_SECRET_KEY
-              value: {{ .Values.django.secretKey }}
+            {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
             - name: DJANGO_ALLOWED_HOSTS
               value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
-            - name: EMAIL_PASSWORD
-              value: {{ .Values.django.emailPassword | quote }}
-            - name: GITHUB_GIST_TOKEN
-              value: {{ .Values.django.githubGistToken | quote }}
+            {{- include "geoquery.secretEnv" (dict "name" "EMAIL_PASSWORD" "ref" .Values.geoquery.emailPassword) | nindent 12 }}
+            {{- include "geoquery.secretEnv" (dict "name" "GITHUB_GIST_TOKEN" "ref" .Values.geoquery.githubGistToken) | nindent 12 }}
             - name: DOWNLOAD_BASE_URL
               value: {{ .Values.django.baseUrl | quote }}
             - name: FRONTEND_BASE_URL

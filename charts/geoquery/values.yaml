@@ -182,9 +182,17 @@ rabbitmq:
 
 django:
   timeZone: "UTC"
-  secretKey: <DJANGO SECRET KEY>
-  emailPassword: <EMAIL PASSWORD>
-  githubGistToken: ""
+  # Sensitive settings are read from Secrets you create in the release
+  # namespace, not from these values — nothing secret belongs in a values file
+  # or in the Helm release history. Each entry names an existing Secret and the
+  # key inside it, e.g.
+  #   kubectl create secret generic geoquery-secret-key \
+  #     --namespace <release namespace> --from-literal=password=<value>
+  # Clearing secretName leaves the corresponding environment variable unset in
+  # the containers, which is how an optional setting is disabled.
+  secretKey:
+    secretName: geoquery-secret-key
+    key: password
   debug: "false"
   allowedHosts: <ALLOWED HOSTS>
   # Comma-separated origins Django trusts for unsafe (POST) requests behind the
@@ -199,6 +207,15 @@ django:
 
 geoquery:
   directories: "false"
+  # Secret-backed settings, in the same {secretName, key} form as
+  # django.secretKey above.
+  emailPassword:
+    secretName: geoquery-email
+    key: password
+  # Optional: only needed for the gist export feature.
+  githubGistToken:
+    secretName: geoquery-gist
+    key: password
 
 # Shared NFS-backed volumes mounted by pods across the chart
 volumes:
