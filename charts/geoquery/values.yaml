@@ -216,6 +216,14 @@ geoquery:
   githubGistToken:
     secretName: geoquery-gist
     key: password
+  # GitHub OAuth app credentials, needed for GitHub login.
+  # Both keys usually live in one Secret, e.g.
+  githubOauthClientId:
+    secretName: geoquery-github-oauth
+    key: clientId
+  githubOauthClientSecret:
+    secretName: geoquery-github-oauth
+    key: clientSecret
 
 # Shared NFS-backed volumes mounted by pods across the chart
 volumes:

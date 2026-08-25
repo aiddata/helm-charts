@@ -37,6 +37,8 @@ spec:
               value: "{{ .Values.django.debug }}"
             {{- include "geoquery.secretEnv" (dict "name" "EMAIL_PASSWORD" "ref" .Values.geoquery.emailPassword) | nindent 12 }}
             {{- include "geoquery.secretEnv" (dict "name" "GITHUB_GIST_TOKEN" "ref" .Values.geoquery.githubGistToken) | nindent 12 }}
+            {{- include "geoquery.secretEnv" (dict "name" "GITHUB_OAUTH_CLIENT_ID" "ref" .Values.geoquery.githubOauthClientId) | nindent 12 }}
+            {{- include "geoquery.secretEnv" (dict "name" "GITHUB_OAUTH_CLIENT_SECRET" "ref" .Values.geoquery.githubOauthClientSecret) | nindent 12 }}
             {{- if .Values.django.csrfTrustedOrigins }}
             - name: DJANGO_CSRF_TRUSTED_ORIGINS
               value: {{ .Values.django.csrfTrustedOrigins | quote }}
