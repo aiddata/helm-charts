@@ -89,8 +89,12 @@ data:
         # locations; used for paths that share a prefix with frontend routes
         # but need backend routing for sub-paths with files (e.g. result
         # downloads under /requests/{uuid}/{file}).
+        # CORS headers are included so browser clients (Pyodide, Marimo,
+        # Jupyter, etc.) can download result files via XHR/fetch.
         {{- range .Values.proxy.regexBackendPaths }}
         location ~ {{ . }} {
+          add_header 'Access-Control-Allow-Origin' '*' always;
+          add_header 'Access-Control-Allow-Methods' 'GET, HEAD, OPTIONS' always;
           proxy_pass http://backend;
         }
         {{- end }}
