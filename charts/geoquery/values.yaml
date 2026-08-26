@@ -36,11 +36,11 @@ proxy:
     # while leaving the frontend page (/requests/{uuid}/) on the frontend.
     - "^/requests/[^/]+/.+"
   backendPaths:
-    - /admin/
-    - /api/
-    - /data/
-    - /static/
-    - /stats/
+    - /admin
+    - /api
+    - /data
+    - /static
+    - /stats
   resources:
     requests:
       cpu: 50m
