@@ -95,6 +95,7 @@ data:
         location ~ {{ . }} {
           add_header 'Access-Control-Allow-Origin' '*' always;
           add_header 'Access-Control-Allow-Methods' 'GET, HEAD, OPTIONS' always;
+          add_header 'Cross-Origin-Resource-Policy' 'cross-origin' always;
           proxy_pass http://backend;
         }
         {{- end }}
