@@ -168,7 +168,7 @@ tasks:
         memory: 2Gi
   processing:
     replicaCount: 8
-    concurrency: 4
+    concurrency: 16
   beat:
     enabled: true
 
