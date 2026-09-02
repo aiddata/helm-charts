@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:2cf35b9
+  image: ghcr.io/aiddata/geoquery-backend:a2fe365
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -152,6 +152,13 @@ networkPolicies:
   rabbitmqOperator:
     namespace: rabbitmq-system
 
+  # Namespace where the KEDA operator is installed. Only used when
+  # tasks.processing.autoscaling is enabled: the operator polls the pending
+  # task count over PostgreSQL from its own namespace, so it needs an ingress
+  # exception on whichever pooler (or the cluster itself) it reads through.
+  kedaOperator:
+    namespace: keda
+
 tasks:
   background:
     replicaCount: 3
@@ -169,6 +176,68 @@ tasks:
   processing:
     replicaCount: 8
     concurrency: 16
+    # Requests only, no limits. A processing task's CPU and memory use swing
+    # widely with the size of the query, so a limit would either throttle a
+    # pod that has idle cores available to it or OOM-kill a legitimately
+    # large query. The CPU request is deliberately well below what a busy pod
+    # actually uses: most concurrency slots sit blocked on Postgres, NFS or an
+    # external API rather than on CPU, and with no limit a pod is free to burst
+    # into whatever the node has idle. It is a scheduling floor, not a budget.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 4Gi
+    # Backlog-driven autoscaling via KEDA. Requires the KEDA operator (keda.sh
+    # CRDs) in the cluster. When enabled the ScaledObject owns the replica
+    # count and replicaCount above is ignored.
+    #
+    # The signal is the number of pending rows in extract_tasks, read from
+    # PostgreSQL -- not RabbitMQ queue depth. Extract tasks self-chain (each
+    # one claims and dispatches its successor on completion) and the beat only
+    # tops up idle slots, so the RabbitMQ queue stays near-empty by design and
+    # says nothing about how much work remains. The count query is backed by
+    # a partial index on status = 0 (analytics migration 0014).
+    autoscaling:
+      enabled: false
+      # Keep a floor of warm workers: the backend image loads Django on start,
+      # so a cold pod is not useful for the first several seconds.
+      minReplicas: 2
+      # Ceiling. Size this against downstream capacity, not node capacity --
+      # maxReplicas * concurrency is the number of tasks that will hit the rw
+      # pooler and the external APIs at once.
+      maxReplicas: 12
+      # Pending tasks per replica. The HPA targets ceil(pending / this), so
+      # with the defaults above: 12 pods above 6000 pending, 6 at 3000, and
+      # the floor of 2 once the backlog is under 1000. Set it from how far
+      # down the backlog should get before workers start being shed.
+      pendingTasksPerReplica: 500
+      # How often KEDA runs the count query. The result is cached and served
+      # to the HPA on its own sync cycle, so this is the only place the
+      # database is polled from.
+      pollingInterval: 30
+      # Idle time before scaling to zero. Only applies when minReplicas is 0
+      # and is omitted from the ScaledObject otherwise, since KEDA warns that
+      # it is inert.
+      cooldownPeriod: 300
+      # Connection details for the count query. userName and dbName match
+      # what CloudNativePG bootstraps by default; the password comes from the
+      # geoquery-db-app Secret via a TriggerAuthentication. The host is
+      # chosen automatically: the ro pooler when enabled (a slightly stale
+      # count from a replica is fine here), else the rw pooler, else the
+      # cluster's primary service.
+      postgres:
+        userName: app
+        dbName: app
+        # Passed straight through to the driver. CNPG poolers accept TLS, so
+        # "prefer" negotiates it when offered without failing when not.
+        sslmode: prefer
+      scaleUp:
+        podsPerPeriod: 4
+        periodSeconds: 60
+      scaleDown:
+        # Backlog must stay low for this long before any pod is removed.
+        stabilizationWindowSeconds: 600
+        periodSeconds: 300
   beat:
     enabled: true
 
@@ -176,10 +245,11 @@ rabbitmq:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 1Gi
+    # No memory limit: RabbitMQ manages its own memory high-watermark, and a
+    # hard limit risks OOM-killing a broker mid-flight.
     limits:
       cpu: 500m
-      memory: 512Mi
 
 django:
   timeZone: "UTC"

@@ -70,6 +70,16 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    {{- if and .Values.tasks.processing.autoscaling.enabled (not .Values.database.pooler.enabled) }}
+    # Allow the KEDA operator to poll the pending task count (only when no pooler fronts the cluster)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.kedaOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
     {{- if .Values.metrics.enabled }}
     # Allow Prometheus to scrape metrics
     - from:

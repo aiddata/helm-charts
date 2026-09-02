@@ -1,0 +1,77 @@
+{{- if .Values.tasks.processing.autoscaling.enabled }}
+{{- $autoscaling := .Values.tasks.processing.autoscaling }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: processing-worker-postgres
+  namespace: {{ .Release.Namespace }}
+spec:
+  # The password comes from the Secret CloudNativePG generates for the
+  # application user, so it never appears in the ScaledObject or in Helm's
+  # release history.
+  secretTargetRef:
+    - parameter: password
+      name: geoquery-db-app
+      key: password
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: processing-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: processing-worker
+  minReplicaCount: {{ $autoscaling.minReplicas }}
+  maxReplicaCount: {{ $autoscaling.maxReplicas }}
+  # Cadence of the count query. The trigger caches the result and the HPA
+  # reads the cache on its own sync cycle, so the database sees exactly one
+  # query per interval regardless of how often the HPA syncs.
+  pollingInterval: {{ $autoscaling.pollingInterval }}
+  {{- if eq (int $autoscaling.minReplicas) 0 }}
+  # Only consulted on the scale-to-zero path; KEDA warns it is inert otherwise.
+  cooldownPeriod: {{ $autoscaling.cooldownPeriod }}
+  {{- end }}
+  advanced:
+    # Leave the Deployment at its current replica count if the ScaledObject
+    # is removed. The alternative restores the count KEDA observed when it
+    # took over -- which, because Helm drops `replicas` from the manifest
+    # while autoscaling is on, is the API default of 1, not replicaCount.
+    # The next Helm upgrade with autoscaling off puts replicaCount back.
+    restoreToOriginalReplicaCount: false
+    horizontalPodAutoscalerConfig:
+      behavior:
+        # Backlog is the reason to add workers, so add them promptly.
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: {{ $autoscaling.scaleUp.podsPerPeriod }}
+              periodSeconds: {{ $autoscaling.scaleUp.periodSeconds }}
+        # Removing a worker interrupts up to `concurrency` in-flight tasks, so
+        # shed capacity slowly and only after the backlog has stayed low for a
+        # while. One pod at a time keeps the drain cost bounded.
+        scaleDown:
+          stabilizationWindowSeconds: {{ $autoscaling.scaleDown.stabilizationWindowSeconds }}
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: {{ $autoscaling.scaleDown.periodSeconds }}
+  triggers:
+    - type: postgresql
+      useCachedMetrics: true
+      authenticationRef:
+        name: processing-worker-postgres
+      metadata:
+        host: {{ include "geoquery.processingAutoscaling.dbHost" . }}
+        port: "5432"
+        userName: {{ $autoscaling.postgres.userName | quote }}
+        dbName: {{ $autoscaling.postgres.dbName | quote }}
+        sslmode: {{ $autoscaling.postgres.sslmode | quote }}
+        # Pending extract tasks, served by the partial index from analytics
+        # migration 0014. Rows already claimed for dispatch (status 3) number
+        # at most one per worker slot and are deliberately left out.
+        query: "SELECT count(*) FROM extract_tasks WHERE status = 0"
+        # Target average per replica: the HPA sizes to ceil(count / value).
+        targetQueryValue: {{ $autoscaling.pendingTasksPerReplica | quote }}
+{{- end }}

@@ -10,4 +10,6 @@ spec:
       memory: {{ .Values.rabbitmq.resources.requests.memory }}
     limits:
       cpu: {{ .Values.rabbitmq.resources.limits.cpu }}
-      memory: {{ .Values.rabbitmq.resources.limits.memory }}
+      {{- with .Values.rabbitmq.resources.limits.memory }}
+      memory: {{ . }}
+      {{- end }}

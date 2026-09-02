@@ -35,6 +35,16 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    {{- if and .Values.tasks.processing.autoscaling.enabled (not .Values.database.pooler.ro.enabled) }}
+    # Allow the KEDA operator to poll the pending task count (only when there is no ro pooler for it to use instead)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.kedaOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
     {{- if .Values.metrics.enabled }}
     # Allow Prometheus to scrape PgBouncer metrics
     - from:
@@ -120,6 +130,16 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    {{- if .Values.tasks.processing.autoscaling.enabled }}
+    # Allow the KEDA operator to poll the pending task count
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.kedaOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
     {{- if .Values.metrics.enabled }}
     # Allow Prometheus to scrape PgBouncer metrics
     - from:

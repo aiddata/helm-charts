@@ -4,7 +4,9 @@ metadata:
   name: processing-worker
   namespace: {{ .Release.Namespace }}
 spec:
+  {{- if not .Values.tasks.processing.autoscaling.enabled }}
   replicas: {{ .Values.tasks.processing.replicaCount }}
+  {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -18,7 +20,7 @@ spec:
       labels:
         app: geoquery-processing-worker
     spec:
-      terminationGracePeriodSeconds: 300
+      terminationGracePeriodSeconds: 900
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -41,7 +43,9 @@ spec:
             - "-Q"
             - "processing"
             - "--concurrency={{ .Values.tasks.processing.concurrency | default 1 }}"
-            - "--max-tasks-per-child=100"
+            - "--max-tasks-per-child=1000"
+          resources:
+            {{- toYaml .Values.tasks.processing.resources | nindent 12 }}
           env:
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
