@@ -40,7 +40,7 @@ spec:
             - "--loglevel=info"
             - "-Q"
             - "processing"
-            - "--concurrency=1"
+            - "--concurrency={{ .Values.tasks.processing.concurrency | default 1 }}"
             - "--max-tasks-per-child=100"
           env:
             - name: DJANGO_TIME_ZONE
