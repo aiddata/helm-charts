@@ -1,0 +1,98 @@
+{{- if .Values.metrics.enabled }}
+{{- if .Values.metrics.podMonitor.enabled }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" }}
+{{- /*
+  The RabbitMQ cluster operator enables the rabbitmq_prometheus plugin by
+  default and exposes it on a container port named "prometheus" (15692) on
+  every server pod, so nothing has to be turned on in tasks/rabbitmq.yaml.
+
+  The plugin splits its output across two paths, and the queue depths this
+  chart's dashboard cares about only exist on the second one:
+
+    /metrics          node-level and aggregated. Emits a single cluster-wide
+                      `rabbitmq_queue_messages_ready` with no queue label,
+                      which cannot answer "which queue is backed up".
+    /metrics/detailed per-object, and only for the metric families named in
+                      the query string.
+
+  They are two PodMonitors rather than two endpoints on one, because the
+  operator derives `job` from the PodMonitor name and `endpoint` from the port
+  name. Two endpoints sharing the port "prometheus" would land on identical
+  target labels and collide on `up`.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-rabbitmq
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-rabbitmq
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: geoquery-rabbitmq
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: prometheus
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      metricRelabelings:
+        # The default endpoint is 13.5k series per pod, and 12.5k of that is
+        # Erlang memory-allocator and scheduler-accounting detail that is only
+        # useful when debugging the BEAM itself. Keeping it would add roughly
+        # 40k active series per namespace across the three server pods.
+        - sourceLabels: [__name__]
+          regex: 'erlang_vm_allocators|erlang_vm_msacc_.*'
+          action: drop
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-rabbitmq-detailed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-rabbitmq
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: geoquery-rabbitmq
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: prometheus
+      path: /metrics/detailed
+      # Without an explicit family list the endpoint returns nothing. These two
+      # give message counts (ready/unacked/total) and consumer counts per queue.
+      params:
+        family:
+          - queue_coarse_metrics
+          - queue_consumer_count
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      metricRelabelings:
+        # Each node also repeats rabbitmq_build_info, rabbitmq_identity_info and
+        # telemetry_scrape_* here. Those already arrive from the PodMonitor
+        # above, on the same pod, so keep only the per-queue series.
+        - sourceLabels: [__name__]
+          regex: 'rabbitmq_detailed_.*'
+          action: keep
+        # Celery gives every worker process a private control queue
+        # (celery@<pod>.celery.pidbox) and event queue (celeryev.<uuid>), both
+        # named after a pod that a deploy replaces. Scraping them churns the
+        # queue label and strands a dead series per worker per rollout. Only the
+        # durable work queues (background, processing) are worth tracking.
+        - sourceLabels: [queue]
+          regex: 'celeryev\..*|.*\.celery\.pidbox'
+          action: drop
+{{- end }}
+{{- end }}
+{{- end }}

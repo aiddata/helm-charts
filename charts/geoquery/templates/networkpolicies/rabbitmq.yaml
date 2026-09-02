@@ -67,6 +67,17 @@ spec:
           port: 25672  # Erlang distribution
         - protocol: TCP
           port: 5672   # AMQP
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus to scrape the rabbitmq_prometheus endpoint
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 15692
+    {{- end }}
     # Allow RabbitMQ operator communication
     - from:
         - namespaceSelector:

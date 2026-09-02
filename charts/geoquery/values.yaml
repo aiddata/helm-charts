@@ -341,6 +341,9 @@ metrics:
   #     scrape the PostgreSQL metrics endpoint (port 9187)
   #   - a PodMonitor is created for each enabled PgBouncer pooler so Prometheus
   #     can scrape the cnpg_pgbouncer_* metrics endpoint (port 9127)
+  #   - two PodMonitors are created for the RabbitMQ cluster, both scraping the
+  #     rabbitmq_prometheus endpoint (port 15692): one for the aggregated
+  #     node-level metrics, one for the per-queue depths on /metrics/detailed
   podMonitor:
     enabled: true
     interval: "30s"
@@ -349,8 +352,9 @@ metrics:
 
   # Ships charts/geoquery/dashboards/geoquery.json as a ConfigMap for the
   # Grafana sidecar to pick up. Requires metrics.enabled above. The dashboard
-  # reads the same django-prometheus series the backend PodMonitor scrapes, so
-  # it is only useful where that PodMonitor is also running.
+  # reads the series the PodMonitors above scrape — mostly django-prometheus,
+  # plus rabbitmq_detailed_queue_* for the Task Queues row — so it is only
+  # useful where those PodMonitors are also running.
   grafanaDashboard:
     enabled: true
 
