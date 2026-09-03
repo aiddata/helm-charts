@@ -332,6 +332,67 @@ database:
   storage:
     storageClass: nfs-csi
     size: 50Gi
+  # Scheduling constraints for the PostgreSQL instance pods. Passed through
+  # verbatim to the CNPG Cluster's spec.affinity, which accepts nodeSelector,
+  # nodeAffinity, tolerations, podAntiAffinityType and topologyKey. Use this to
+  # pin the database to nodes with fast storage/network, e.g.
+  #   affinity:
+  #     nodeAffinity:
+  #       requiredDuringSchedulingIgnoredDuringExecution:
+  #         nodeSelectorTerms:
+  #           - matchExpressions:
+  #               - key: kubernetes.io/hostname
+  #                 operator: In
+  #                 values: [node-a, node-b, node-c]
+  affinity: {}
+  # CPU/memory for each PostgreSQL instance pod. Unset by default; set
+  # requests equal to limits in production so the pod gets Guaranteed QoS and
+  # is never evicted under node memory pressure. Size postgresql.parameters
+  # below to match (shared_buffers ~25% of memory, effective_cache_size ~75%).
+  #   resources:
+  #     requests: {cpu: "4", memory: 16Gi}
+  #     limits: {cpu: "4", memory: 16Gi}
+  resources: {}
+  postgresql:
+    # Rendered verbatim into the CNPG Cluster's postgresql.parameters. CNPG
+    # requires every value to be a string, so quote numbers. Overriding this
+    # map replaces it wholesale; copy the entries you want to keep.
+    # Defaults assume SSD-backed block storage (e.g. Ceph RBD) and a pod with
+    # roughly 16Gi of memory. Changing shared_buffers, wal_buffers or any
+    # pg_stat_statements.* setting triggers a CNPG rolling restart.
+    parameters:
+      # Keep long read-only queries on the replicas (served by the ro pooler)
+      # from being cancelled with "conflict with recovery" during WAL replay
+      hot_standby_feedback: "on"
+      max_standby_streaming_delay: "30s"
+      # Django (USE_TZ) expects "UTC"; the default "Etc/UTC" doesn't string-match,
+      # so Django issues a SET TIME ZONE on every new connection. Under
+      # transaction pooling that's a wasted round trip per request.
+      timezone: "UTC"
+      # Memory. The CNPG default shared_buffers (~160MB) cannot cache a
+      # multi-GB database; most reads went to disk.
+      shared_buffers: "4GB"
+      effective_cache_size: "12GB"
+      work_mem: "16MB"
+      maintenance_work_mem: "512MB"
+      # WAL and checkpoints. The extract-task workload is many tiny write
+      # transactions; a small wal_buffers fills constantly and a 1GB
+      # max_wal_size forces checkpoints by volume, each one emitting a burst
+      # of full-page images.
+      wal_buffers: "64MB"
+      max_wal_size: "4GB"
+      min_wal_size: "1GB"
+      checkpoint_timeout: "15min"
+      checkpoint_completion_target: "0.9"
+      wal_compression: "lz4"
+      # Planner/IO costs for SSD block storage (defaults assume spinning disks).
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+      # Query statistics. shared_preload_libraries is operator-managed and
+      # cannot be set here; CNPG adds pg_stat_statements to it (and creates
+      # the extension) whenever any pg_stat_statements.* GUC is present.
+      pg_stat_statements.track: "top"
+      pg_stat_statements.max: "10000"
   # PgBouncer connection poolers (CloudNativePG Pooler CRD).
   # rw fronts the primary and serves every workload except the migration Job.
   # ro fronts the replicas and serves read-only queries from the backend, so
@@ -346,8 +407,10 @@ database:
       max_client_conn: "500"
       # Server connections per pool, per pooler pod. Total connections to the
       # primary is roughly rw.instances * default_pool_size, which must stay
-      # well under PostgreSQL's max_connections (100 by default).
-      default_pool_size: "20"
+      # well under PostgreSQL's max_connections (100 by default). Only raise
+      # this once commits are cheap (SSD-backed storage); on slow fsync it
+      # just deepens the queue behind the WAL lock.
+      default_pool_size: "30"
       # Inert today (the backend uses psycopg2, which never prepares
       # server-side), but required if the backend ever moves to psycopg 3.
       max_prepared_statements: "100"
@@ -358,6 +421,10 @@ database:
       limits:
         cpu: 500m
         memory: 256Mi
+    # Node affinity for the pooler pods, rendered alongside the built-in pod
+    # anti-affinity. Poolers proxy every query to the primary, so keep them on
+    # the same network fabric as the database (see database.affinity).
+    nodeAffinity: {}
     rw:
       instances: 2
     ro:

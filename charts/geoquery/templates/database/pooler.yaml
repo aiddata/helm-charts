@@ -29,6 +29,10 @@ spec:
                   matchLabels:
                     cnpg.io/poolerName: geoquery-db-pooler-rw
                 topologyKey: kubernetes.io/hostname
+        {{- with .Values.database.pooler.nodeAffinity }}
+        nodeAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
 {{- if .Values.database.pooler.ro.enabled }}
 ---
 apiVersion: postgresql.cnpg.io/v1
@@ -61,5 +65,9 @@ spec:
                   matchLabels:
                     cnpg.io/poolerName: geoquery-db-pooler-ro
                 topologyKey: kubernetes.io/hostname
+        {{- with .Values.database.pooler.nodeAffinity }}
+        nodeAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
 {{- end }}
 {{- end }}
