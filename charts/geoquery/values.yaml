@@ -1,5 +1,5 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:3beacc1
+  image: ghcr.io/aiddata/geoquery-frontend:80c218d
   replicaCount: 1
 
 backend:
