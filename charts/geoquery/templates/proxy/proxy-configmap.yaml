@@ -119,13 +119,16 @@ data:
         location = /revoke {
           proxy_pass http://mcp;
         }
+        location = /consent {
+          proxy_pass http://mcp;
+        }
         location = /auth/callback {
           proxy_pass http://mcp;
         }
         location = /.well-known/oauth-authorization-server {
           proxy_pass http://mcp;
         }
-        location = /.well-known/oauth-protected-resource/mcp {
+        location ~ ^/.well-known/oauth-protected-resource {
           proxy_pass http://mcp;
         }
         {{- end }}
