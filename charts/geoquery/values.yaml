@@ -406,11 +406,19 @@ database:
       # Client-side connection ceiling, per pooler pod.
       max_client_conn: "500"
       # Server connections per pool, per pooler pod. Total connections to the
-      # primary is roughly rw.instances * default_pool_size, which must stay
-      # well under PostgreSQL's max_connections (100 by default). Only raise
-      # this once commits are cheap (SSD-backed storage); on slow fsync it
-      # just deepens the queue behind the WAL lock.
-      default_pool_size: "30"
+      # primary across every pooler (rw + ro + api, below) must stay well
+      # under PostgreSQL's max_connections (100 by default), with headroom
+      # left for direct/admin/migration connections -- see the incident where
+      # a migration Job couldn't get a connection because the poolers alone
+      # were already close to max_connections. Only raise this once commits
+      # are cheap (SSD-backed storage); on slow fsync it just deepens the
+      # queue behind the WAL lock.
+      #
+      # rw + ro used to both default to 30 (2 instances each = 120
+      # theoretical max, before api existed at all). Trimmed to 20 here to
+      # make room for the dedicated api pool without raising the combined
+      # ceiling.
+      default_pool_size: "20"
       # Inert today (the backend uses psycopg2, which never prepares
       # server-side), but required if the backend ever moves to psycopg 3.
       max_prepared_statements: "100"
@@ -434,6 +442,25 @@ database:
       # the backend's database router decides what is safe to send.
       enabled: true
       instances: 2
+    api:
+      # A separate rw Pooler used only by geoquery-backend (see
+      # backend-deployment.yaml's PG_RW_HOST). processing-worker,
+      # background-worker, celery-beat, and geoquery-import all keep using
+      # the shared pooler-rw above. Since this is a distinct PgBouncer
+      # process with its own connection budget to the primary, the API's
+      # slots here can't be exhausted by extraction/processing load, however
+      # busy that gets -- that isolation was missing before: every component
+      # shared one pool, so a saturated processing load could (and did)
+      # starve ordinary site requests of a connection.
+      enabled: true
+      instances: 2
+      parameters:
+        # Deliberately small: the API's own connections are quick page/tile
+        # requests, not the sustained bulk work processing does, so it
+        # doesn't need a large pool -- just one that's never contended by
+        # other components. Tune up if this pool is ever seen queuing
+        # (SHOW POOLS in the pooler-api pod).
+        default_pool_size: "10"
   backup:
     enabled: false
     schedule: "0 0 0,12 * * *"

@@ -33,6 +33,47 @@ spec:
         nodeAffinity:
           {{- toYaml . | nindent 10 }}
         {{- end }}
+{{- if .Values.database.pooler.api.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: geoquery-db-pooler-api
+  namespace: {{ .Release.Namespace }}
+spec:
+  cluster:
+    name: geoquery-db
+  instances: {{ .Values.database.pooler.api.instances }}
+  type: rw
+  pgbouncer:
+    poolMode: {{ .Values.database.pooler.poolMode }}
+    parameters:
+      # Dedicated pool for geoquery-backend only (see backend-deployment.yaml's
+      # PG_RW_HOST). A separate Pooler means a separate PgBouncer process with
+      # its own connection budget to the primary -- processing-worker and
+      # background-worker load on the shared pooler-rw pool can never starve
+      # the API of a slot here, regardless of how busy extraction gets.
+      {{- toYaml (merge .Values.database.pooler.api.parameters .Values.database.pooler.parameters) | nindent 6 }}
+  template:
+    spec:
+      containers:
+        - name: pgbouncer
+          resources:
+            {{- toYaml .Values.database.pooler.resources | nindent 12 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    cnpg.io/poolerName: geoquery-db-pooler-api
+                topologyKey: kubernetes.io/hostname
+        {{- with .Values.database.pooler.nodeAffinity }}
+        nodeAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+{{- end }}
 {{- if .Values.database.pooler.ro.enabled }}
 ---
 apiVersion: postgresql.cnpg.io/v1

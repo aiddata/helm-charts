@@ -200,4 +200,92 @@ spec:
         - protocol: TCP
           port: 443
 {{- end }}
+{{- if .Values.database.pooler.api.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pooler-api-network-policy
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/poolerName: geoquery-db-pooler-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only geoquery-backend uses this pool -- that isolation is the entire
+    # point (see values.yaml's database.pooler.api comment), so nothing else
+    # gets ingress access here, unlike pooler-rw-network-policy above.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-backend
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- if .Values.metrics.enabled }}
+    # Allow Prometheus to scrape PgBouncer metrics
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9127
+    {{- end }}
+    # Allow CNPG operator communication
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.dns.namespace }}
+          podSelector:
+            {{- toYaml .Values.networkPolicies.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kubernetes API server access (the CNPG instance manager in the
+    # pooler pod watches its own Pooler resource)
+    # Uses the actual endpoint IP (not ClusterIP) since ipBlock is evaluated post-DNAT
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.kubeApiServer.cidr }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicies.kubeApiServer.port }}
+    # Allow connection to PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: geoquery-db
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow CNPG operator communication
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicies.cnpgOperator.namespace }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
 {{- end }}

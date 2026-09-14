@@ -49,8 +49,14 @@ spec:
               value: {{ .Values.django.baseUrl | quote }}
             - name: REQUESTS_DIR
               value: "/requests"
+            # Dedicated pooler (see database/pooler.yaml) so processing/
+            # background load on the shared pooler-rw pool can't starve the
+            # API of a connection slot. Falls back to the shared rw pooler,
+            # then to the primary directly, if the dedicated pooler is off.
             - name: PG_RW_HOST
-              {{- if .Values.database.pooler.enabled }}
+              {{- if and .Values.database.pooler.enabled .Values.database.pooler.api.enabled }}
+              value: geoquery-db-pooler-api
+              {{- else if .Values.database.pooler.enabled }}
               value: geoquery-db-pooler-rw
               {{- else }}
               valueFrom:
