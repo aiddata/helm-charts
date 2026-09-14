@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:80c218d
+  image: ghcr.io/aiddata/geoquery-frontend:c435840
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:6e4516c
+  image: ghcr.io/aiddata/geoquery-backend:c435840
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -11,6 +11,56 @@ backend:
   # pod needs a different UID/GID than the other pods mounting the shares,
   # e.g. when the data and requests shares are owned by different users.
   import: {}
+
+# GeoQuery MCP server: a second front end onto the same backend image and
+# database (see templates/mcp/) that gives chat clients (Claude, etc.)
+# authenticated tool access to GeoQuery data. Disabled by default.
+#
+# Served on the *same* hostname as the website (django.baseUrl), routed by
+# geoquery-proxy -- there is no separate mcp.baseUrl/hostname to configure.
+# This is narrower than it sounds: FastMCP's OAuth proxy registers /authorize,
+# /token, /register, /revoke, /auth/callback and the two /.well-known/...
+# discovery routes as fixed absolute paths, not nested under any prefix, so
+# proxy-configmap.yaml routes exactly those paths (plus /mcp itself) to
+# geoquery-mcp and leaves everything else alone. Requires proxy.enabled.
+#
+# Turning this on also requires a second GitHub OAuth App -- distinct from
+# geoquery.githubOauth* above, since a GitHub OAuth App accepts exactly one
+# callback URL, and this one's is {django.baseUrl}/auth/callback -- plus the
+# Secrets referenced below.
+mcp:
+  enabled: false
+  replicaCount: 1
+  # More than 1 replica is not yet supported: FastMCP's OAuth proxy persists
+  # client registrations and in-flight authorization state as encrypted files
+  # under FASTMCP_HOME, so an /authorize request handled by one pod and the
+  # /auth/callback landing on another would fail the handshake. Raise this
+  # only once that store is moved to something shared (e.g. Redis).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # A GitHub identity with no matching GeoQuery account gets one created (with
+  # its GitHub-verified email) and immediately claims any anonymous requests
+  # submitted under that address. Turn off to require signing up on the
+  # website first.
+  autoProvisionUsers: "true"
+  githubClientId:
+    secretName: geoquery-mcp-github-oauth
+    key: clientId
+  githubClientSecret:
+    secretName: geoquery-mcp-github-oauth
+    key: clientSecret
+  # Signs the tokens the OAuth proxy issues and derives the encryption key
+  # for its on-disk client-registration store. Must be stable across restarts
+  # -- rotating it invalidates every issued token and forces every client to
+  # re-register -- and is required (not optional) once mcp.enabled is true.
+  jwtSigningKey:
+    secretName: geoquery-mcp-jwt-signing-key
+    key: password
 
 # Reverse proxy that fronts the app. It is the single service external
 # traffic (see exposure below) is routed to, and it forwards each request to

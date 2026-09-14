@@ -68,6 +68,11 @@ data:
       upstream backend {
         server geoquery-backend.{{ .Release.Namespace }}.svc.cluster.local:80;
       }
+      {{- if .Values.mcp.enabled }}
+      upstream mcp {
+        server geoquery-mcp.{{ .Release.Namespace }}.svc.cluster.local:80;
+      }
+      {{- end }}
 
       # Preserve the original host and client info so Django can validate
       # CSRF/Host and build correct absolute URLs behind the proxy.
@@ -92,6 +97,38 @@ data:
           add_header Content-Type text/plain;
           return 200 "ok\n";
         }
+
+        {{- if .Values.mcp.enabled }}
+        # MCP server, on the same hostname as the rest of the app (see
+        # values.yaml's mcp comment). The tool endpoint is /mcp; the rest are
+        # OAuth routes FastMCP's proxy registers at fixed absolute paths, not
+        # nested under any prefix, so each is routed here individually rather
+        # than as a group.
+        location = /mcp {
+          proxy_pass http://mcp;
+        }
+        location = /authorize {
+          proxy_pass http://mcp;
+        }
+        location = /token {
+          proxy_pass http://mcp;
+        }
+        location = /register {
+          proxy_pass http://mcp;
+        }
+        location = /revoke {
+          proxy_pass http://mcp;
+        }
+        location = /auth/callback {
+          proxy_pass http://mcp;
+        }
+        location = /.well-known/oauth-authorization-server {
+          proxy_pass http://mcp;
+        }
+        location = /.well-known/oauth-protected-resource/mcp {
+          proxy_pass http://mcp;
+        }
+        {{- end }}
 
         # Regex-matched paths routed to the backend. Evaluated before prefix
         # locations; used for paths that share a prefix with frontend routes

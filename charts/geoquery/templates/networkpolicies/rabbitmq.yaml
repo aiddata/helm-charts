@@ -55,6 +55,16 @@ spec:
       ports:
         - protocol: TCP
           port: 5672
+    {{- if .Values.mcp.enabled }}
+    # Allow AMQP connections from the MCP server
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-mcp
+      ports:
+        - protocol: TCP
+          port: 5672
+    {{- end }}
     # Allow cluster peer communication (Erlang distribution + clustering)
     - from:
         - podSelector:

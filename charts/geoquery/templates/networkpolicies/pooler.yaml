@@ -32,6 +32,11 @@ spec:
         - podSelector:
             matchLabels:
               app: geoquery-celery-beat
+        {{- if .Values.mcp.enabled }}
+        - podSelector:
+            matchLabels:
+              app: geoquery-mcp
+        {{- end }}
       ports:
         - protocol: TCP
           port: 5432

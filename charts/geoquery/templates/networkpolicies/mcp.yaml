@@ -1,8 +1,8 @@
-{{- if and .Values.networkPolicies.enabled .Values.proxy.enabled }}
+{{- if and .Values.networkPolicies.enabled .Values.mcp.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: proxy-network-policy
+  name: mcp-network-policy
   namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
@@ -10,14 +10,24 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app: geoquery-proxy
+      app: geoquery-mcp
   policyTypes:
     - Ingress
     - Egress
   ingress:
-    # Allow traffic from the gateway/ingress controller based on exposure.type.
-    # The proxy is the single external entry point, so it owns the exposure
-    # source rules (the frontend/backend only accept traffic from the proxy).
+    {{- if .Values.proxy.enabled }}
+    # Traffic reaches the MCP server only via the reverse proxy, on the same
+    # hostname as the rest of the app -- see values.yaml's mcp comment for
+    # why (see proxy-network-policy for the exposure source rules).
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-proxy
+      ports:
+        - protocol: TCP
+          port: 8001
+    {{- else }}
+    # Allow traffic from gateway/ingress controller based on exposure.type
     {{- if eq .Values.exposure.type "gateway" }}
     - from:
         - namespaceSelector:
@@ -26,7 +36,7 @@ spec:
             {{- toYaml .Values.exposure.gateway.networkPolicy.podSelector | nindent 12 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.proxy.containerPort }}
+          port: 8001
     {{- else if eq .Values.exposure.type "ingress" }}
     - from:
         - namespaceSelector:
@@ -35,7 +45,7 @@ spec:
             {{- toYaml .Values.exposure.ingress.networkPolicy.podSelector | nindent 12 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.proxy.containerPort }}
+          port: 8001
     {{- else if eq .Values.exposure.type "custom" }}
     {{- range .Values.exposure.custom.networkPolicy }}
     - from:
@@ -47,12 +57,13 @@ spec:
           {{- end }}
       ports:
         - protocol: TCP
-          port: {{ $.Values.proxy.containerPort }}
+          port: 8001
     {{- end }}
     {{- end }}
     {{- /* type "none" has no ingress rules - traffic is blocked */}}
+    {{- end }}
   egress:
-    # Allow DNS resolution (needed to resolve the upstream service names)
+    # Allow DNS resolution
     - to:
         - namespaceSelector:
             matchLabels:
@@ -64,30 +75,48 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Allow forwarding to the frontend pods
+    # Allow connection to PostgreSQL, via the shared rw pooler when enabled
     - to:
         - podSelector:
             matchLabels:
-              app: geoquery-frontend
+              cnpg.io/cluster: geoquery-db
+        {{- if .Values.database.pooler.enabled }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: geoquery-db-pooler-rw
+        {{- end }}
       ports:
         - protocol: TCP
-          port: 3000
-    # Allow forwarding to the backend pods
+          port: 5432
+    # Allow connection to RabbitMQ
     - to:
         - podSelector:
             matchLabels:
-              app: geoquery-backend
+              app.kubernetes.io/name: geoquery-rabbitmq
       ports:
         - protocol: TCP
-          port: 8000
-    {{- if .Values.mcp.enabled }}
-    # Allow forwarding to the MCP server
+          port: 5672
+    # Allow external API egress (GitHub OAuth token exchange + /user/emails,
+    # Protomaps, etc.)
+    {{- if .Values.networkPolicies.externalEgress.allowAll }}
     - to:
-        - podSelector:
-            matchLabels:
-              app: geoquery-mcp
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            # Exclude private networks to prevent lateral movement
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
       ports:
         - protocol: TCP
-          port: 8001
+          port: 443
+    {{- else if .Values.networkPolicies.externalEgress.cidrs }}
+    {{- range .Values.networkPolicies.externalEgress.cidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+      ports:
+        {{- toYaml .ports | nindent 8 }}
+    {{- end }}
     {{- end }}
 {{- end }}
