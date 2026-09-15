@@ -105,9 +105,15 @@ spec:
             # protected-resource metadata are built from it.
             - name: MCP_BASE_URL
               value: {{ .Values.django.baseUrl | quote }}
+            - name: MCP_AUTH_DISABLED
+              value: {{ .Values.mcp.authDisabled | quote }}
+            # With auth disabled the backend ignores the OAuth settings, so
+            # don't make the pod depend on Secrets it will never read.
+            {{- if not .Values.mcp.authDisabled }}
             {{- include "geoquery.secretEnv" (dict "name" "MCP_GITHUB_CLIENT_ID" "ref" .Values.mcp.githubClientId) | nindent 12 }}
             {{- include "geoquery.secretEnv" (dict "name" "MCP_GITHUB_CLIENT_SECRET" "ref" .Values.mcp.githubClientSecret) | nindent 12 }}
             {{- include "geoquery.secretEnv" (dict "name" "MCP_JWT_SIGNING_KEY" "ref" .Values.mcp.jwtSigningKey) | nindent 12 }}
+            {{- end }}
             - name: MCP_AUTO_PROVISION_USERS
               value: {{ .Values.mcp.autoProvisionUsers | quote }}
             # FastMCP's OAuth proxy persists client registrations under its

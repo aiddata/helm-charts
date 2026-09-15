@@ -48,6 +48,12 @@ mcp:
   # submitted under that address. Turn off to require signing up on the
   # website first.
   autoProvisionUsers: "true"
+  # Run the MCP server with no authentication at all, even with the GitHub
+  # OAuth app below configured. Every caller is anonymous: public data only,
+  # no exports. The GitHub and JWT Secrets below are then not referenced, so
+  # they need not exist. Never enable on a deployment that serves
+  # catalog-restricted data.
+  authDisabled: false
   githubClientId:
     secretName: geoquery-mcp-github-oauth
     key: clientId
@@ -57,7 +63,8 @@ mcp:
   # Signs the tokens the OAuth proxy issues and derives the encryption key
   # for its on-disk client-registration store. Must be stable across restarts
   # -- rotating it invalidates every issued token and forces every client to
-  # re-register -- and is required (not optional) once mcp.enabled is true.
+  # re-register -- and is required (not optional) once mcp.enabled is true,
+  # unless mcp.authDisabled is also true.
   jwtSigningKey:
     secretName: geoquery-mcp-jwt-signing-key
     key: password
