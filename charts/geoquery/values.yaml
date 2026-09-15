@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:c435840
+  image: ghcr.io/aiddata/geoquery-frontend:89366f3
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:2c6a935
+  image: ghcr.io/aiddata/geoquery-backend:89366f3
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -14,28 +14,45 @@ backend:
 
 # GeoQuery MCP server: a second front end onto the same backend image and
 # database (see templates/mcp/) that gives chat clients (Claude, etc.)
-# authenticated tool access to GeoQuery data. Disabled by default.
+# authenticated tool access to GeoQuery data. Disabled by default. Requires
+# proxy.enabled.
 #
-# Served on the *same* hostname as the website (django.baseUrl), routed by
-# geoquery-proxy -- there is no separate mcp.baseUrl/hostname to configure.
-# This is narrower than it sounds: FastMCP's OAuth proxy registers /authorize,
-# /token, /register, /revoke, /auth/callback and the two /.well-known/...
-# discovery routes as fixed absolute paths, not nested under any prefix, so
-# proxy-configmap.yaml routes exactly those paths (plus /mcp itself) to
-# geoquery-mcp and leaves everything else alone. Requires proxy.enabled.
+# Sign-in goes through GeoQuery itself, not GitHub directly: the backend runs
+# an OpenID Connect provider under /api/idp/ (already covered by the /api
+# backend path) and the MCP server's OAuth proxy is its client. A connecting
+# chat client is sent to the website's /account page, signs in there (GitHub,
+# via geoquery.githubOauth* below) and acts as that same GeoQuery user,
+# catalog grants included. There is no second GitHub OAuth App.
 #
-# Turning this on also requires a second GitHub OAuth App -- distinct from
-# geoquery.githubOauth* above, since a GitHub OAuth App accepts exactly one
-# callback URL, and this one's is {django.baseUrl}/auth/callback -- plus the
-# Secrets referenced below.
+# Turning this on requires these Secrets in the release namespace:
+#   geoquery.oidcPrivateKey  RSA key the provider signs tokens with
+#   mcp.oidcClientSecret     shared by the backend and the MCP server
+#   mcp.jwtSigningKey        signs the tokens the MCP server issues
+# and a backend image with `manage.py ensure_mcp_oidc_client`, which the
+# migration Job runs (after migrate and createcachetable) on every install and
+# upgrade to register the client.
 mcp:
   enabled: false
+  # Public URL chat clients reach the MCP server at, including scheme (no
+  # trailing slash). Empty serves it on django.baseUrl's hostname, where
+  # geoquery-proxy routes /mcp and the OAuth paths FastMCP's proxy registers
+  # at the root (/authorize, /token, /register, /revoke, /consent,
+  # /auth/callback, /.well-known/oauth-*) to it by path. Set it to a hostname
+  # of its own, e.g. "https://mcp.geoquery.org", and geoquery-proxy sends
+  # every request for that host to the MCP server instead, leaving those root
+  # paths to the website. Pointing the hostname at geoquery-proxy is up to you
+  # (exposure.gateway.hostnames, exposure.ingress.hosts, or the tunnel).
+  # Changing it moves the registered redirect URI, so connected clients must
+  # reconnect.
+  baseUrl: ""
   replicaCount: 1
   # More than 1 replica is not yet supported: FastMCP's OAuth proxy persists
-  # client registrations and in-flight authorization state as encrypted files
-  # under FASTMCP_HOME, so an /authorize request handled by one pod and the
-  # /auth/callback landing on another would fail the handshake. Raise this
-  # only once that store is moved to something shared (e.g. Redis).
+  # client registrations, in-flight authorization state and upstream GeoQuery
+  # tokens as encrypted files under FASTMCP_HOME, an emptyDir, so an
+  # /authorize request handled by one pod and the /auth/callback landing on
+  # another would fail the handshake. For the same reason, restarting the pod
+  # makes every connected client sign in again. Raise this only once that
+  # store is moved to something shared.
   resources:
     requests:
       cpu: 100m
@@ -43,28 +60,17 @@ mcp:
     limits:
       cpu: "1"
       memory: 1Gi
-  # A GitHub identity with no matching GeoQuery account gets one created (with
-  # its GitHub-verified email) and immediately claims any anonymous requests
-  # submitted under that address. Turn off to require signing up on the
-  # website first.
-  autoProvisionUsers: "true"
-  # Run the MCP server with no authentication at all, even with the GitHub
-  # OAuth app below configured. Every caller is anonymous: public data only,
-  # no exports. The GitHub and JWT Secrets below are then not referenced, so
-  # they need not exist. Never enable on a deployment that serves
-  # catalog-restricted data.
-  authDisabled: false
-  githubClientId:
-    secretName: geoquery-mcp-github-oauth
-    key: clientId
-  githubClientSecret:
-    secretName: geoquery-mcp-github-oauth
-    key: clientSecret
+  # The MCP server's client id on GeoQuery's OIDC provider. Not a secret.
+  oidcClientId: geoquery-mcp
+  # The matching client secret, read by both the backend (which registers the
+  # client) and the MCP server. Generate with `openssl rand -base64 48`.
+  oidcClientSecret:
+    secretName: geoquery-mcp-oidc-client
+    key: password
   # Signs the tokens the OAuth proxy issues and derives the encryption key
-  # for its on-disk client-registration store. Must be stable across restarts
-  # -- rotating it invalidates every issued token and forces every client to
-  # re-register -- and is required (not optional) once mcp.enabled is true,
-  # unless mcp.authDisabled is also true.
+  # for its on-disk store. Must be stable across restarts -- rotating it
+  # invalidates every issued token and forces every client to re-register.
+  # Generate with `openssl rand -base64 48`.
   jwtSigningKey:
     secretName: geoquery-mcp-jwt-signing-key
     key: password
@@ -352,6 +358,15 @@ geoquery:
   githubOauthClientSecret:
     secretName: geoquery-github-oauth
     key: clientSecret
+  # RSA private key (PEM) that GeoQuery's OIDC provider signs MCP sign-in
+  # tokens with. Only read when mcp.enabled. Create it with e.g.
+  #   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 > key.pem
+  #   kubectl create secret generic geoquery-oidc-private-key \
+  #     --namespace <release namespace> --from-file=password=key.pem
+  # Replacing it invalidates every issued token, so MCP clients must reconnect.
+  oidcPrivateKey:
+    secretName: geoquery-oidc-private-key
+    key: password
 
 # Shared NFS-backed volumes mounted by pods across the chart
 volumes:

@@ -61,14 +61,35 @@ spec:
             capabilities:
               drop:
                 - ALL
+          # Every step is idempotent, so the Job is safe to re-run. The cache
+          # table holds the OIDC provider's authorization codes between the
+          # browser's authorize request and the MCP server's token request.
           command:
-            ["/app/.venv/bin/python", "manage.py", "migrate"]
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              /app/.venv/bin/python manage.py migrate
+              /app/.venv/bin/python manage.py createcachetable
+              {{- if .Values.mcp.enabled }}
+              /app/.venv/bin/python manage.py ensure_mcp_oidc_client
+              {{- end }}
           env:
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
             - name: DJANGO_ALLOWED_HOSTS
               value: {{ .Values.django.allowedHosts }}
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
+            {{- if .Values.mcp.enabled }}
+            # Registers the MCP server's OIDC client from the same values the
+            # MCP Deployment uses, so a changed mcp.baseUrl or rotated client
+            # secret is applied on the next upgrade.
+            - name: MCP_BASE_URL
+              value: {{ include "geoquery.mcpBaseUrl" . | quote }}
+            - name: MCP_OIDC_CLIENT_ID
+              value: {{ .Values.mcp.oidcClientId | quote }}
+            {{- include "geoquery.secretEnv" (dict "name" "MCP_OIDC_CLIENT_SECRET" "ref" .Values.mcp.oidcClientSecret) | nindent 12 }}
+            {{- end }}
             # Deliberately bypasses the PgBouncer pooler: this Job is a
             # pre-install hook, so on a fresh install it runs before the Pooler
             # exists, and DDL shouldn't go through a transaction pool anyway.

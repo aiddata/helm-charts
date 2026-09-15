@@ -62,6 +62,17 @@ spec:
     {{- end }}
     {{- /* type "none" has no ingress rules - traffic is blocked */}}
     {{- end }}
+    {{- if .Values.mcp.enabled }}
+    # Allow the MCP server to reach the OIDC token, revocation and JWKS
+    # endpoints in-cluster (see mcp-deployment.yaml's MCP_OIDC_INTERNAL_URL)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: geoquery-mcp
+      ports:
+        - protocol: TCP
+          port: 8000
+    {{- end }}
     {{- if .Values.metrics.enabled }}
     # Allow Prometheus to scrape the django-prometheus metrics port
     - from:

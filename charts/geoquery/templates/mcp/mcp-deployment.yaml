@@ -99,26 +99,27 @@ spec:
                   key: password
             - name: CELERY_BROKER_URL
               value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
-            # The URL a chat client reaches this server at -- the *same*
-            # origin as the website (see values.yaml's mcp comment for why
-            # there is no separate mcp.baseUrl). The OAuth callback and
-            # protected-resource metadata are built from it.
+            # The URL a chat client reaches this server at: mcp.baseUrl, or the
+            # website's own origin when that is unset (see values.yaml's mcp
+            # comment). The OAuth callback and protected-resource metadata are
+            # built from it, so it must match the backend's value exactly.
             - name: MCP_BASE_URL
-              value: {{ .Values.django.baseUrl | quote }}
-            - name: MCP_AUTH_DISABLED
-              value: {{ .Values.mcp.authDisabled | quote }}
-            # With auth disabled the backend ignores the OAuth settings, so
-            # don't make the pod depend on Secrets it will never read.
-            {{- if not .Values.mcp.authDisabled }}
-            {{- include "geoquery.secretEnv" (dict "name" "MCP_GITHUB_CLIENT_ID" "ref" .Values.mcp.githubClientId) | nindent 12 }}
-            {{- include "geoquery.secretEnv" (dict "name" "MCP_GITHUB_CLIENT_SECRET" "ref" .Values.mcp.githubClientSecret) | nindent 12 }}
+              value: {{ include "geoquery.mcpBaseUrl" . | quote }}
+            # This server's client on GeoQuery's own OIDC provider, registered
+            # from the same values by the migration Job
+            # (ensure_mcp_oidc_client). Browsers sign in at FRONTEND_BASE_URL,
+            # the issuer; the token, revocation and JWKS calls go straight to
+            # the backend Service instead of back out through the proxy.
+            - name: MCP_OIDC_CLIENT_ID
+              value: {{ .Values.mcp.oidcClientId | quote }}
+            {{- include "geoquery.secretEnv" (dict "name" "MCP_OIDC_CLIENT_SECRET" "ref" .Values.mcp.oidcClientSecret) | nindent 12 }}
+            - name: MCP_OIDC_INTERNAL_URL
+              value: "http://geoquery-backend.{{ .Release.Namespace }}.svc.cluster.local"
             {{- include "geoquery.secretEnv" (dict "name" "MCP_JWT_SIGNING_KEY" "ref" .Values.mcp.jwtSigningKey) | nindent 12 }}
-            {{- end }}
-            - name: MCP_AUTO_PROVISION_USERS
-              value: {{ .Values.mcp.autoProvisionUsers | quote }}
-            # FastMCP's OAuth proxy persists client registrations under its
-            # home directory. /tmp is the one path any runtime UID can write,
-            # same reason the Containerfile puts the uv cache there.
+            # FastMCP's OAuth proxy persists client registrations and upstream
+            # GeoQuery tokens under its home directory. /tmp is the one path
+            # any runtime UID can write, same reason the Containerfile puts the
+            # uv cache there.
             - name: FASTMCP_HOME
               value: /tmp/fastmcp
           resources:

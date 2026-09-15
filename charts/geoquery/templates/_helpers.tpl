@@ -40,3 +40,25 @@ geoquery-db-pooler-rw.{{ .Release.Namespace }}.svc
 geoquery-db-rw.{{ .Release.Namespace }}.svc
 {{- end -}}
 {{- end -}}
+
+{{/*
+Public URL of the MCP server, without a trailing slash: mcp.baseUrl, or the
+website's django.baseUrl when that is unset. The backend registers
+{this}/auth/callback as the OIDC client's redirect URI and the MCP server
+builds the same URI, and the provider matches it exactly, so every workload
+must render it from here.
+*/}}
+{{- define "geoquery.mcpBaseUrl" -}}
+{{- .Values.mcp.baseUrl | default .Values.django.baseUrl | trimSuffix "/" -}}
+{{- end -}}
+
+{{/*
+Hostname (no port) of mcp.baseUrl when it differs from django.baseUrl's, else
+empty. geoquery-proxy serves the MCP server on a server block of its own for
+that host; when empty it routes the MCP paths on the website's hostname.
+*/}}
+{{- define "geoquery.mcpDedicatedHost" -}}
+{{- $mcpHost := regexReplaceAll ":[0-9]+$" (urlParse (include "geoquery.mcpBaseUrl" .)).host "" -}}
+{{- $siteHost := regexReplaceAll ":[0-9]+$" (urlParse .Values.django.baseUrl).host "" -}}
+{{- if ne $mcpHost $siteHost }}{{ $mcpHost }}{{ end -}}
+{{- end -}}

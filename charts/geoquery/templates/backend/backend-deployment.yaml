@@ -32,13 +32,31 @@ spec:
               value: {{ .Values.django.timeZone }}
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
             - name: DJANGO_ALLOWED_HOSTS
+              {{- if .Values.mcp.enabled }}
+              # The MCP server calls the OIDC token and JWKS endpoints on this
+              # Service's in-cluster name (see mcp-deployment.yaml's
+              # MCP_OIDC_INTERNAL_URL), so Django must accept that Host too.
+              value: {{ printf "%s,geoquery-backend.%s.svc.cluster.local" .Values.django.allowedHosts .Release.Namespace | quote }}
+              {{- else }}
               value: {{ .Values.django.allowedHosts }}
+              {{- end }}
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
             {{- include "geoquery.secretEnv" (dict "name" "EMAIL_PASSWORD" "ref" .Values.geoquery.emailPassword) | nindent 12 }}
             {{- include "geoquery.secretEnv" (dict "name" "GITHUB_GIST_TOKEN" "ref" .Values.geoquery.githubGistToken) | nindent 12 }}
             {{- include "geoquery.secretEnv" (dict "name" "GITHUB_OAUTH_CLIENT_ID" "ref" .Values.geoquery.githubOauthClientId) | nindent 12 }}
             {{- include "geoquery.secretEnv" (dict "name" "GITHUB_OAUTH_CLIENT_SECRET" "ref" .Values.geoquery.githubOauthClientSecret) | nindent 12 }}
+            {{- if .Values.mcp.enabled }}
+            # GeoQuery's OIDC provider, which signs MCP users in. The MCP_*
+            # values let `manage.py ensure_mcp_oidc_client` be re-run by hand
+            # from this pod; the migration Job already runs it on every deploy.
+            {{- include "geoquery.secretEnv" (dict "name" "OIDC_PRIVATE_KEY" "ref" .Values.geoquery.oidcPrivateKey) | nindent 12 }}
+            - name: MCP_BASE_URL
+              value: {{ include "geoquery.mcpBaseUrl" . | quote }}
+            - name: MCP_OIDC_CLIENT_ID
+              value: {{ .Values.mcp.oidcClientId | quote }}
+            {{- include "geoquery.secretEnv" (dict "name" "MCP_OIDC_CLIENT_SECRET" "ref" .Values.mcp.oidcClientSecret) | nindent 12 }}
+            {{- end }}
             {{- if .Values.django.csrfTrustedOrigins }}
             - name: DJANGO_CSRF_TRUSTED_ORIGINS
               value: {{ .Values.django.csrfTrustedOrigins | quote }}

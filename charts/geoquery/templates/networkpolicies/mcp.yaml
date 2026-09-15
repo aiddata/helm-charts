@@ -96,8 +96,16 @@ spec:
       ports:
         - protocol: TCP
           port: 5672
-    # Allow external API egress (GitHub OAuth token exchange + /user/emails,
-    # Protomaps, etc.)
+    # Allow connection to the backend, whose OIDC token, revocation and JWKS
+    # endpoints are called in-cluster (MCP_OIDC_INTERNAL_URL)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: geoquery-backend
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Allow external API egress (Protomaps, etc.)
     {{- if .Values.networkPolicies.externalEgress.allowAll }}
     - to:
         - ipBlock:
