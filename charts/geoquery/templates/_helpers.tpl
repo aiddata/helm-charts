@@ -62,3 +62,19 @@ that host; when empty it routes the MCP paths on the website's hostname.
 {{- $siteHost := regexReplaceAll ":[0-9]+$" (urlParse .Values.django.baseUrl).host "" -}}
 {{- if ne $mcpHost $siteHost }}{{ $mcpHost }}{{ end -}}
 {{- end -}}
+
+{{/*
+Path the MCP tool endpoint is served on, which follows the topology:
+
+* On a hostname of its own, "/" -- clients connect to mcp.baseUrl with nothing
+  appended. FastMCP registers the tool endpoint as an exact-match route, so
+  the OAuth routes it also serves at the root (/authorize, /token, ...) keep
+  their own paths alongside it.
+* On the website's hostname, "/mcp" -- the root there belongs to the frontend.
+
+Both `run_mcp --path` and the proxy's location block render from here. Split
+them and the proxy would route a path the server does not serve.
+*/}}
+{{- define "geoquery.mcpPath" -}}
+{{- if include "geoquery.mcpDedicatedHost" . }}/{{ else }}/mcp{{ end -}}
+{{- end -}}

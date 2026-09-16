@@ -25,7 +25,9 @@ spec:
           # Same image as geoquery-backend, different entrypoint: the MCP
           # server is a second front end onto the same database, not a
           # separate application (see backend/mcp_server/management/commands/run_mcp.py).
-          command: ["/app/.venv/bin/python", "manage.py", "run_mcp", "--host", "0.0.0.0", "--port", "8001"]
+          # --path must match what geoquery-proxy routes here; both come from
+          # the mcpPath helper.
+          command: ["/app/.venv/bin/python", "manage.py", "run_mcp", "--host", "0.0.0.0", "--port", "8001", "--path", {{ include "geoquery.mcpPath" . | quote }}]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

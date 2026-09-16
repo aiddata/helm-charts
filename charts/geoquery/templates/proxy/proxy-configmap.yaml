@@ -102,11 +102,12 @@ data:
 
         {{- if and .Values.mcp.enabled (not $mcpHost) }}
         # MCP server, on the same hostname as the rest of the app (mcp.baseUrl
-        # unset, see values.yaml). The tool endpoint is /mcp; the rest are
-        # OAuth routes FastMCP's proxy registers at fixed absolute paths, not
-        # nested under any prefix, so each is routed here individually rather
-        # than as a group.
-        location = /mcp {
+        # unset, see values.yaml). The tool endpoint is /mcp -- the root here
+        # belongs to the frontend, so it cannot move to "/" the way it does on
+        # a dedicated hostname. The rest are OAuth routes FastMCP's proxy
+        # registers at fixed absolute paths, not nested under any prefix, so
+        # each is routed here individually rather than as a group.
+        location = {{ include "geoquery.mcpPath" . }} {
           proxy_pass http://mcp;
         }
         location = /authorize {
@@ -167,9 +168,11 @@ data:
       {{- if and .Values.mcp.enabled $mcpHost }}
 
       # MCP server on its own hostname (mcp.baseUrl). Every path goes to it,
-      # which covers /mcp and the OAuth routes FastMCP's proxy registers at the
-      # root without claiming those paths on the website's hostname. The server
-      # above stays the default for any other Host, including probes by pod IP.
+      # which covers the tool endpoint -- served at "/" here, so clients
+      # connect to mcp.baseUrl with nothing appended -- and the OAuth routes
+      # FastMCP's proxy registers at the root, without claiming any of those
+      # paths on the website's hostname. The server above stays the default
+      # for any other Host, including probes by pod IP.
       server {
         listen {{ .Values.proxy.containerPort }};
         server_name {{ $mcpHost }};

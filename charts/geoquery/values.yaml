@@ -34,16 +34,24 @@ backend:
 mcp:
   enabled: false
   # Public URL chat clients reach the MCP server at, including scheme (no
-  # trailing slash). Empty serves it on django.baseUrl's hostname, where
-  # geoquery-proxy routes /mcp and the OAuth paths FastMCP's proxy registers
-  # at the root (/authorize, /token, /register, /revoke, /consent,
-  # /auth/callback, /.well-known/oauth-*) to it by path. Set it to a hostname
-  # of its own, e.g. "https://mcp.geoquery.org", and geoquery-proxy sends
-  # every request for that host to the MCP server instead, leaving those root
-  # paths to the website. Pointing the hostname at geoquery-proxy is up to you
-  # (exposure.gateway.hostnames, exposure.ingress.hosts, or the tunnel).
-  # Changing it moves the registered redirect URI, so connected clients must
-  # reconnect.
+  # trailing slash). This also decides the topology, and with it the URL
+  # people actually paste into a chat client:
+  #
+  # * Empty serves the MCP server on django.baseUrl's hostname, where
+  #   geoquery-proxy routes /mcp and the OAuth paths FastMCP's proxy registers
+  #   at the root (/authorize, /token, /register, /revoke, /consent,
+  #   /auth/callback, /.well-known/oauth-*) to it by path. The tool endpoint
+  #   is "/mcp", since the root belongs to the website, so clients connect to
+  #   "https://geoquery.org/mcp".
+  # * A hostname of its own, e.g. "https://mcp.geoquery.org", makes
+  #   geoquery-proxy send every request for that host to the MCP server and
+  #   leaves those root paths to the website. The tool endpoint is then served
+  #   at "/", so clients connect to "https://mcp.geoquery.org" with nothing
+  #   appended. Pointing the hostname at geoquery-proxy is up to you
+  #   (exposure.gateway.hostnames, exposure.ingress.hosts, or the tunnel).
+  #
+  # Changing it moves both the registered redirect URI and the tool endpoint,
+  # so connected clients must be reconnected at the new URL.
   baseUrl: ""
   replicaCount: 1
   # More than 1 replica is not yet supported: FastMCP's OAuth proxy persists
