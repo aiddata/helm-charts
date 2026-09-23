@@ -111,7 +111,6 @@ proxy:
     - /api
     - /data
     - /static
-    - /stats
   resources:
     requests:
       cpu: 50m
