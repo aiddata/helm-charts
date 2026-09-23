@@ -410,6 +410,10 @@ volumes:
 database:
   replicas: 3
   storage:
+    # Environments override this. Declare size explicitly in the overlay rather
+    # than inheriting this default: the spec is what a NEW instance is
+    # provisioned with, so a replaced replica inheriting a too-small default
+    # cannot hold the database -- see aiddata/geoquery, docs/get-involved/contributing/dev/database.md (section 10).
     storageClass: nfs-csi
     size: 50Gi
   # Scheduling constraints for the PostgreSQL instance pods. Passed through
@@ -440,6 +444,12 @@ database:
     # Defaults assume SSD-backed block storage (e.g. Ceph RBD) and a pod with
     # roughly 16Gi of memory. Changing shared_buffers, wal_buffers or any
     # pg_stat_statements.* setting triggers a CNPG rolling restart.
+    #
+    # Before tuning the write path, read aiddata/geoquery,
+    # docs/get-involved/contributing/dev/database.md (section 6 and appendix B).
+    # This cluster is write-bandwidth bound, not lock bound, and two obvious
+    # levers have already been tested and measured: commit_delay reduced lock
+    # waiters but cost 17% throughput and is deliberately left at 0.
     parameters:
       # Keep long read-only queries on the replicas (served by the ro pooler)
       # from being cancelled with "conflict with recovery" during WAL replay
@@ -483,6 +493,11 @@ database:
     # DISABLE_SERVER_SIDE_CURSORS in the backend's Django settings.
     poolMode: transaction
     parameters:
+      # The reasoning behind these numbers -- why the budget must stay under
+      # max_connections, why transaction pooling makes long transactions
+      # disproportionately expensive, and why pool saturation is not always a
+      # capacity problem -- is documented in aiddata/geoquery, docs/get-involved/contributing/dev/database.md (section 5).
+      #
       # Client-side connection ceiling, per pooler pod.
       max_client_conn: "500"
       # Server connections per pool, per pooler pod. Total connections to the
