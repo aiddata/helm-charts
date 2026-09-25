@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:d819181
+  image: ghcr.io/aiddata/geoquery-frontend:281e69b
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:8a46af5
+  image: ghcr.io/aiddata/geoquery-backend:99c2d92
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
