@@ -236,6 +236,11 @@ tasks:
     # one process per CPU core, which on large nodes forks dozens of
     # Django-loaded processes and multiplies idle memory accordingly.
     concurrency: 4
+    # How many build_extract_tasks_worker tasks one hourly build wave fans
+    # out to (N_EXTRACT_TASK_BUILDERS). Each holds a pooler connection for
+    # its whole INSERT batch, so more builders trade extract throughput for
+    # build-out speed.
+    extractTaskBuilders: 1
     resources:
       requests:
         cpu: 100m

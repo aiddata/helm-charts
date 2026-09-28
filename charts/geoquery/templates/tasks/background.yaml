@@ -45,6 +45,8 @@ spec:
           resources:
             {{- toYaml .Values.tasks.background.resources | nindent 12 }}
           env:
+            - name: N_EXTRACT_TASK_BUILDERS
+              value: "{{ .Values.tasks.background.extractTaskBuilders }}"
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
