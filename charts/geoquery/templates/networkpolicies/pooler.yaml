@@ -127,11 +127,14 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Only the backend sends read-only queries to the replicas
+    # The backend's API reads, and the background worker's stats report
     - from:
         - podSelector:
             matchLabels:
               app: geoquery-backend
+        - podSelector:
+            matchLabels:
+              app: geoquery-background-worker
       ports:
         - protocol: TCP
           port: 5432
