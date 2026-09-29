@@ -251,6 +251,16 @@ tasks:
   processing:
     replicaCount: 8
     concurrency: 16
+    # Extract tasks claimed per Celery message (EXTRACT_TASK_CLAIM_BATCH).
+    # Also set on the background worker, where the beat's top-up
+    # (dispatch_processing_tasks) multiplies idle slots by it, so both roles
+    # always get the same value.
+    claimBatch: 64
+    # Celery --max-tasks-per-child. This counts messages, not extract tasks,
+    # so a process lives for roughly maxTasksPerChild * claimBatch tasks
+    # before it is recycled. Lower it when raising claimBatch so memory that
+    # creeps up per task (rasterio/GDAL) is still reclaimed as often.
+    maxTasksPerChild: 1000
     # Requests only, no limits. A processing task's CPU and memory use swing
     # widely with the size of the query, so a limit would either throttle a
     # pod that has idle cores available to it or OOM-kill a legitimately
