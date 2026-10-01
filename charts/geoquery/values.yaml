@@ -615,16 +615,31 @@ database:
       parameters:
         # Small for the same reason as api: this path is many short
         # transactions needing low latency, not sustained bulk throughput.
-        # Watch for queueing via the pooler pod's metrics endpoint
-        # (cnpg_pgbouncer_pools_cl_waiting on :9127/metrics) before raising.
+        # The problem it solves is contention, not throughput -- the clients
+        # are ~6 background-worker pods plus geoquery-mcp, so roughly 8
+        # concurrent short transactions, against the 139-deep queue they sat
+        # in on the shared pool. Watch for queueing via the pooler pod's
+        # metrics endpoint (cnpg_pgbouncer_pools_cl_waiting on :9127/metrics)
+        # before raising it.
         #
-        # Budget check at chart defaults, primary-facing only: rw 2x20=40,
-        # api 2x10=20, tasks 2x10=20 => 80 of max_connections=100. The ro
-        # pool does not count -- type: ro targets the replicas, each with
-        # their own max_connections. Leaves 20 for direct, admin and
-        # migration Job connections. Any environment overriding the shared
-        # default_pool_size upward must redo this arithmetic.
-        default_pool_size: "10"
+        # Budget, primary-facing only. The ro pool does not count: type: ro
+        # targets the replicas, each with their own max_connections.
+        #
+        #   chart defaults:   rw 2x20=40 + api 2x10=20 + tasks 2x5=10 => 70
+        #   prod (shared 25): rw 2x25=50 + api 2x10=20 + tasks 2x5=10 => 80
+        #
+        # against max_connections=100, leaving 20-30 for direct, admin and
+        # migration Job connections -- an incident is on record where a
+        # migration Job could not get one because the poolers had taken them
+        # all. Deliberately 5 rather than 10 so that an environment raising
+        # the shared default_pool_size (as prod does) still lands at 80 and
+        # does not have to redo this arithmetic to stay safe.
+        #
+        # If this pool ever does need to be bigger, take the slack from api
+        # rather than rw: api was measured completely idle (cl_active=0,
+        # sv_idle=1) through the contention incident that motivated this
+        # pool, while rw sizing governs extraction throughput.
+        default_pool_size: "5"
   backup:
     enabled: false
     schedule: "0 0 0,12 * * *"
