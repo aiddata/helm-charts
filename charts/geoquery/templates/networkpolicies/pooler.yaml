@@ -127,7 +127,8 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # The backend's API reads, and the background worker's stats report
+    # The backend's API reads, the background worker's stats report and
+    # nightly docs, and the MCP server's boundary and coverage reads
     - from:
         - podSelector:
             matchLabels:
@@ -135,6 +136,11 @@ spec:
         - podSelector:
             matchLabels:
               app: geoquery-background-worker
+        {{- if .Values.mcp.enabled }}
+        - podSelector:
+            matchLabels:
+              app: geoquery-mcp
+        {{- end }}
       ports:
         - protocol: TCP
           port: 5432

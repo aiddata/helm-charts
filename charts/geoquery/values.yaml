@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:16b50c5
+  image: ghcr.io/aiddata/geoquery-backend:6c97206
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -516,8 +516,9 @@ database:
       pg_stat_statements.max: "10000"
   # PgBouncer connection poolers (CloudNativePG Pooler CRD).
   # rw fronts the primary and serves every workload except the migration Job.
-  # ro fronts the replicas and serves read-only queries from the backend, so
-  # website reads don't compete with writes from the processing tasks.
+  # ro fronts the replicas and serves read-only queries from the backend,
+  # background-worker and MCP server, so their reads don't compete with
+  # writes from the processing tasks.
   pooler:
     enabled: true
     # session | transaction. transaction multiplexes best but requires

@@ -87,6 +87,39 @@ spec:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: password
+            # Read-only replica target, for the boundary geometry and coverage
+            # reads in mcp_server. Without these the "replica" alias silently
+            # falls back to PG_RW_* and those reads land on the primary. Falls
+            # back to the primary here too when the ro pooler is disabled.
+            - name: PG_RO_HOST
+              {{- if and .Values.database.pooler.enabled .Values.database.pooler.ro.enabled }}
+              value: geoquery-db-pooler-ro
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: host
+              {{- end }}
+            - name: PG_RO_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: dbname
+            - name: PG_RO_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: port
+            - name: PG_RO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: username
+            - name: PG_RO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: password
             - name: PROTOMAPS_API_KEY
               value: {{ .Values.protomaps.key }}
             - name: RABBITMQ_HOST
