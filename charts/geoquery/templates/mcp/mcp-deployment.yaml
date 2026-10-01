@@ -1,12 +1,19 @@
 {{- if .Values.mcp.enabled }}
+{{- if ne (int .Values.mcp.replicaCount) 1 }}
+{{- fail "mcp.replicaCount must be 1 because FastMCP uses a single-writer file store" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: geoquery-mcp
   namespace: {{ .Release.Namespace }}
 spec:
-  # See values.yaml's mcp.replicaCount comment: more than 1 is not yet safe.
+  # See values.yaml's mcp.replicaCount comment: exactly 1 replica is supported.
   replicas: {{ .Values.mcp.replicaCount }}
+  # FastMCP's file store has a single writer. Recreate stops the old pod, and
+  # so releases the state volume, before the replacement starts.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: geoquery-mcp
@@ -19,6 +26,11 @@ spec:
         runAsNonRoot: true
         runAsUser: {{ .Values.volumes.requests.runAsUser | default 1000 }}
         runAsGroup: {{ .Values.volumes.requests.runAsGroup | default 1000 }}
+        # Lets the container's UID/GID write the state volume. Block-backed
+        # volumes honor it; an NFS-backed existing claim may not, so its
+        # directory must already be writable by that UID/GID.
+        fsGroup: {{ .Values.volumes.requests.runAsGroup | default 1000 }}
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: mcp
           image: {{ .Values.backend.image }}
@@ -155,12 +167,16 @@ spec:
             - name: MCP_OIDC_INTERNAL_URL
               value: "http://geoquery-backend.{{ .Release.Namespace }}.svc.cluster.local"
             {{- include "geoquery.secretEnv" (dict "name" "MCP_JWT_SIGNING_KEY" "ref" .Values.mcp.jwtSigningKey) | nindent 12 }}
+            # Lifetime of the access token FastMCP issues to chat clients; the
+            # upstream GeoQuery token stays short-lived and is refreshed.
+            - name: MCP_ACCESS_TOKEN_EXPIRY_SECONDS
+              value: {{ .Values.mcp.accessTokenExpirySeconds | int64 | quote }}
             # FastMCP's OAuth proxy persists client registrations and upstream
-            # GeoQuery tokens under its home directory. /tmp is the one path
-            # any runtime UID can write, same reason the Containerfile puts the
-            # uv cache there.
+            # GeoQuery tokens under its home directory. That is the
+            # fastmcp-state volume (a PVC unless mcp.persistence.enabled is
+            # false), not /tmp, so sessions survive pod replacement.
             - name: FASTMCP_HOME
-              value: /tmp/fastmcp
+              value: /var/lib/fastmcp
           resources:
             {{- toYaml .Values.mcp.resources | nindent 12 }}
           # No HTTP health route is exposed by the MCP server today, so probe
@@ -180,6 +196,8 @@ spec:
               mountPath: /tmp
             - name: geoquery-requests
               mountPath: /requests
+            - name: fastmcp-state
+              mountPath: /var/lib/fastmcp
           ports:
             - name: http
               containerPort: 8001
@@ -189,4 +207,14 @@ spec:
         - name: geoquery-requests
           persistentVolumeClaim:
             claimName: geoquery-requests
+        {{- if .Values.mcp.persistence.enabled }}
+        - name: fastmcp-state
+          persistentVolumeClaim:
+            claimName: {{ include "geoquery.mcpStateClaimName" . }}
+        {{- else }}
+        # Persistence disabled: every pod replacement discards FastMCP state
+        # and logs out all MCP clients.
+        - name: fastmcp-state
+          emptyDir: {}
+        {{- end }}
 {{- end }}

@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:1a13b7d
+  image: ghcr.io/aiddata/geoquery-backend:c662f93
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -53,14 +53,42 @@ mcp:
   # Changing it moves both the registered redirect URI and the tool endpoint,
   # so connected clients must be reconnected at the new URL.
   baseUrl: ""
+  # Must be 1 (the chart fails to render otherwise): FastMCP's OAuth proxy
+  # keeps client registrations, in-flight authorization state and upstream
+  # GeoQuery tokens as encrypted files in a single-writer store under
+  # FASTMCP_HOME, so an /authorize request handled by one pod and the
+  # /auth/callback landing on another would fail the handshake. The
+  # deployment uses the Recreate strategy for the same reason: the old pod
+  # releases the state volume before its replacement starts.
   replicaCount: 1
-  # More than 1 replica is not yet supported: FastMCP's OAuth proxy persists
-  # client registrations, in-flight authorization state and upstream GeoQuery
-  # tokens as encrypted files under FASTMCP_HOME, an emptyDir, so an
-  # /authorize request handled by one pod and the /auth/callback landing on
-  # another would fail the handshake. For the same reason, restarting the pod
-  # makes every connected client sign in again. Raise this only once that
-  # store is moved to something shared.
+  # Lifetime of the access token FastMCP gives chat clients. The upstream
+  # GeoQuery token remains short-lived and is refreshed transparently. Needs a
+  # backend image that reads MCP_ACCESS_TOKEN_EXPIRY_SECONDS.
+  accessTokenExpirySeconds: 2592000 # 30 days
+  # FastMCP's state (FASTMCP_HOME=/var/lib/fastmcp) lives on a PVC so pod
+  # replacements and image upgrades keep clients signed in. Deleting the PVC or
+  # rotating jwtSigningKey forces every client to reconnect.
+  persistence:
+    # Setting this to false falls back to an emptyDir: every pod replacement
+    # then logs out all MCP clients.
+    enabled: true
+
+    # Use an already-created PVC when non-empty. The chart must not create its
+    # own PVC in that case. For an NFS-backed claim, make sure the directory is
+    # already writable by volumes.requests.runAsUser/runAsGroup, since NFS may
+    # ignore fsGroup. Use this when the cluster cannot dynamically provision.
+    existingClaim: ""
+
+    # Used only for a chart-created PVC (geoquery-mcp-state). Empty uses the
+    # cluster's default StorageClass.
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+
+    # Preserve registrations and tokens if the Helm release is removed.
+    annotations:
+      helm.sh/resource-policy: keep
   resources:
     requests:
       cpu: 100m
@@ -77,7 +105,10 @@ mcp:
     key: password
   # Signs the tokens the OAuth proxy issues and derives the encryption key
   # for its on-disk store. Must be stable across restarts -- rotating it
-  # invalidates every issued token and forces every client to re-register.
+  # invalidates every issued token (even though the state PVC persists) and
+  # forces every client to re-register. Keep mcp.oidcClientSecret and
+  # geoquery.oidcPrivateKey stable too. The chart only reads this from the
+  # Secret; never generate it during deployment.
   # Generate with `openssl rand -base64 48`.
   jwtSigningKey:
     secretName: geoquery-mcp-jwt-signing-key
