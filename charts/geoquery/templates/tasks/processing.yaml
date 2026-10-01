@@ -46,6 +46,11 @@ spec:
             - "--max-tasks-per-child={{ .Values.tasks.processing.maxTasksPerChild }}"
           resources:
             {{- toYaml .Values.tasks.processing.resources | nindent 12 }}
+          {{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: 9091
+          {{- end }}
           env:
             - name: EXTRACT_TASK_CLAIM_BATCH
               value: "{{ .Values.tasks.processing.claimBatch }}"
@@ -107,6 +112,17 @@ spec:
                   key: password
             - name: CELERY_BROKER_URL
               value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
+            {{- if .Values.metrics.enabled }}
+            # The Celery parent serves the extract task metrics on 9091, summed
+            # from per-process files the prefork children write under
+            # PROMETHEUS_MULTIPROC_DIR (created on start, inside the /tmp
+            # emptyDir). PROMETHEUS_ENABLED stays unset here: django-prometheus's
+            # own exporter would run in the parent and miss the children.
+            - name: WORKER_METRICS_PORT
+              value: "9091"
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus-multiproc
+            {{- end }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

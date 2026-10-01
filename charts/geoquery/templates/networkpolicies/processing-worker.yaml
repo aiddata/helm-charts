@@ -14,8 +14,19 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-  ingress: []
-    # Processing workers receive no inbound traffic - they pull from queues
+  # Processing workers pull from queues, so the only inbound traffic is
+  # Prometheus scraping the extract task metrics port
+  ingress:
+    {{- if .Values.metrics.enabled }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9091
+    {{- end }}
   egress:
     # Allow DNS resolution
     - to:

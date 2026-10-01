@@ -25,6 +25,33 @@ spec:
       path: {{ .Values.metrics.path }}
       interval: {{ .Values.metrics.podMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+---
+# Separate from the backend's PodMonitor because the operator names the job
+# label after the PodMonitor, so the worker series get a job of their own.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-processing-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-processing-worker
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: geoquery-processing-worker
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    # The Celery parent serves the extract task metrics, summed across its
+    # prefork children, on the "metrics" port (9091).
+    - port: metrics
+      path: {{ .Values.metrics.path }}
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
 {{- end }}
 {{- end }}
 {{- end }}

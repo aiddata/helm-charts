@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:6c97206
+  image: ghcr.io/aiddata/geoquery-backend:1a13b7d
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -681,6 +681,8 @@ metrics:
   # switch above to be true. When enabled:
   #   - a PodMonitor is created for the backend pods so Prometheus scrapes
   #     the django-prometheus endpoint on the dedicated metrics port (9091)
+  #   - a PodMonitor is created for the processing workers so Prometheus
+  #     scrapes the extract task metrics (geoquery_extract_*), also on 9091
   #   - a PodMonitor is created for the database cluster so Prometheus can
   #     scrape the PostgreSQL metrics endpoint (port 9187)
   #   - a PodMonitor is created for each enabled PgBouncer pooler so Prometheus
@@ -697,7 +699,8 @@ metrics:
   # Ships charts/geoquery/dashboards/geoquery.json as a ConfigMap for the
   # Grafana sidecar to pick up. Requires metrics.enabled above. The dashboard
   # reads the series the PodMonitors above scrape — mostly django-prometheus,
-  # plus rabbitmq_detailed_queue_* for the Task Queues row — so it is only
+  # plus rabbitmq_detailed_queue_* for the Task Queues row and
+  # geoquery_extract_* for the Extract Tasks row — so it is only
   # useful where those PodMonitors are also running.
   grafanaDashboard:
     enabled: true
