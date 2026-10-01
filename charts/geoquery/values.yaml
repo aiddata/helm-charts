@@ -480,12 +480,29 @@ database:
       work_mem: "16MB"
       maintenance_work_mem: "512MB"
       # WAL and checkpoints. The extract-task workload is many tiny write
-      # transactions; a small wal_buffers fills constantly and a 1GB
+      # transactions; a small wal_buffers fills constantly and an undersized
       # max_wal_size forces checkpoints by volume, each one emitting a burst
       # of full-page images.
+      #
+      # A *requested* checkpoint (one triggered by hitting max_wal_size) ignores
+      # checkpoint_completion_target and writes flat out, after which every
+      # page's first touch emits another full-page image and refills WAL sooner
+      # -- the loop is self-reinforcing. Measured on prod over 120h at 4GB:
+      # 899 of 1002 checkpoints forced by volume (89.7%), 601.6M full-page
+      # images, 2,530 GB of WAL, 95h of checkpointer write time. Raising the
+      # ceiling to 16GB cut that to 12 forced / 1 timed, made a 136.8M-row
+      # extract_tasks reset run 2.06x faster, and took steady-state processing
+      # from 1.42M to 4.5M tasks/hr.
+      #
+      # 8GB is the default because WAL is charged three times over: each CNPG
+      # instance keeps its own pg_wal on its own PVC, so the delta from 1GB
+      # costs 3x that in pool space, and prod + staging share one ceph pool.
+      # PROD OVERRIDES THIS TO 16GB in its environment overlay -- see
+      # docs/get-involved/contributing/dev/database.md section 10. Size any
+      # increase against `ceph df` (MAX AVAIL), not filesystem free space.
       wal_buffers: "64MB"
-      max_wal_size: "4GB"
-      min_wal_size: "1GB"
+      max_wal_size: "8GB"
+      min_wal_size: "4GB"
       checkpoint_timeout: "15min"
       checkpoint_completion_target: "0.9"
       wal_compression: "lz4"
