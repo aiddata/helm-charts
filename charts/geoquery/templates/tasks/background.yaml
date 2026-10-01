@@ -64,7 +64,9 @@ spec:
             - name: REQUESTS_DIR
               value: "/requests"
             - name: PG_RW_HOST
-              {{- if .Values.database.pooler.enabled }}
+              {{- if and .Values.database.pooler.enabled .Values.database.pooler.tasks.enabled }}
+              value: geoquery-db-pooler-tasks
+              {{- else if .Values.database.pooler.enabled }}
               value: geoquery-db-pooler-rw
               {{- else }}
               valueFrom:

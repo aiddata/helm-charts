@@ -50,12 +50,16 @@ spec:
               value: {{ .Values.django.baseUrl | quote }}
             - name: REQUESTS_DIR
               value: "/requests"
-            # Shared rw pooler, same as the other backend-image workloads
-            # (processing-worker, background-worker, celery-beat). The
-            # dedicated pooler-api Pooler is reserved for geoquery-backend
-            # alone -- see database/pooler.yaml.
+            # The dedicated pooler-tasks Pooler, shared with
+            # background-worker: MCP serves user-facing tool calls, so it
+            # needs low latency rather than the bulk throughput
+            # processing-worker is tuned for, and on the shared pooler-rw it
+            # was starved by it. pooler-api stays reserved for
+            # geoquery-backend alone. See database/pooler.yaml.
             - name: PG_RW_HOST
-              {{- if .Values.database.pooler.enabled }}
+              {{- if and .Values.database.pooler.enabled .Values.database.pooler.tasks.enabled }}
+              value: geoquery-db-pooler-tasks
+              {{- else if .Values.database.pooler.enabled }}
               value: geoquery-db-pooler-rw
               {{- else }}
               valueFrom:
