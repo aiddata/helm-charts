@@ -25,8 +25,11 @@ spec:
   minReplicaCount: {{ $autoscaling.minReplicas }}
   maxReplicaCount: {{ $autoscaling.maxReplicas }}
   # Cadence of the count query. The trigger caches the result and the HPA
-  # reads the cache on its own sync cycle, so the database sees exactly one
-  # query per interval regardless of how often the HPA syncs.
+  # reads the cache on its own sync cycle, so the HPA's own sync rate does not
+  # add queries. Note this only holds while the query finishes inside the
+  # interval -- a query that outlives pollingInterval overlaps with the next
+  # one (observed: 115s query vs 30s interval put 2 independent backends on a
+  # replica at once). The bounded query below is what keeps that true.
   pollingInterval: {{ $autoscaling.pollingInterval }}
   {{- if eq (int $autoscaling.minReplicas) 0 }}
   # Only consulted on the scale-to-zero path; KEDA warns it is inert otherwise.
@@ -69,9 +72,29 @@ spec:
         dbName: {{ $autoscaling.postgres.dbName | quote }}
         sslmode: {{ $autoscaling.postgres.sslmode | quote }}
         # Pending extract tasks, served by the partial index from analytics
-        # migration 0014. Rows already claimed for dispatch (status 3) number
-        # at most one per worker slot and are deliberately left out.
-        query: "SELECT count(*) FROM extract_tasks WHERE status = 0"
+        # migration 0014. Rows already claimed for dispatch (status 3) are
+        # deliberately left out.
+        #
+        # Bounded on purpose. An unbounded count(*) has to tally every matching
+        # index entry, so its cost grows with the backlog it is measuring --
+        # i.e. it gets slowest exactly when the system is busiest. At 651M
+        # pending it took 115s on a read replica (and over 9min on the primary
+        # under write load) against a 30s pollingInterval, so counts overlapped
+        # and ran back-to-back, burning replica IO the website reads need.
+        #
+        # LIMIT lets the scan stop early: the planner satisfies it from the
+        # first partition and reports `never executed` for the other 56, so the
+        # work is bounded by the LIMIT rather than by the backlog. Same replica,
+        # same moment: 6.9ms execution against the unbounded query's 115s, on
+        # ~10k buffers that were all cache hits.
+        #
+        # The bound is maxReplicas * pendingTasksPerReplica, which is the exact
+        # point at or above which the HPA pins to maxReplicas. So the scaling
+        # decision is unchanged: any backlog big enough to saturate still
+        # saturates. Below the bound no truncation happens and the count is
+        # exact, which is the only range where the precise value changes the
+        # replica count -- and where it is cheap anyway.
+        query: "SELECT count(*) FROM (SELECT 1 FROM extract_tasks WHERE status = 0 LIMIT {{ mul (int $autoscaling.maxReplicas) (int $autoscaling.pendingTasksPerReplica) }}) z"
         # Target average per replica: the HPA sizes to ceil(count / value).
         targetQueryValue: {{ $autoscaling.pendingTasksPerReplica | quote }}
 {{- end }}
