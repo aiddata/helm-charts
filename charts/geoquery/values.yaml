@@ -532,7 +532,9 @@ database:
       # Client-side connection ceiling, per pooler pod.
       max_client_conn: "500"
       # Server connections per pool, per pooler pod. Total connections to the
-      # primary across every pooler (rw + ro + api, below) must stay well
+      # primary across every rw-type pooler (rw + api + tasks, below -- ro
+      # targets the replicas and draws on their max_connections, not the
+      # primary's) must stay well
       # under PostgreSQL's max_connections (100 by default), with headroom
       # left for direct/admin/migration connections -- see the incident where
       # a migration Job couldn't get a connection because the poolers alone
@@ -571,8 +573,9 @@ database:
     api:
       # A separate rw Pooler used only by geoquery-backend (see
       # backend-deployment.yaml's PG_RW_HOST). processing-worker,
-      # background-worker, celery-beat, and geoquery-import all keep using
-      # the shared pooler-rw above. Since this is a distinct PgBouncer
+      # celery-beat and geoquery-import keep using the shared pooler-rw
+      # above; background-worker and geoquery-mcp have their own pool, see
+      # tasks below. Since this is a distinct PgBouncer
       # process with its own connection budget to the primary, the API's
       # slots here can't be exhausted by extraction/processing load, however
       # busy that gets -- that isolation was missing before: every component
@@ -586,6 +589,41 @@ database:
         # doesn't need a large pool -- just one that's never contended by
         # other components. Tune up if this pool is ever seen queuing
         # (SHOW POOLS in the pooler-api pod).
+        default_pool_size: "10"
+    tasks:
+      # A separate rw Pooler for the request path: background-worker (request
+      # materialization and the completion sweep) and geoquery-mcp. Same
+      # reasoning as api above, applied to the other latency-sensitive
+      # components -- they were left on the shared pooler-rw alongside
+      # processing-worker, and got starved by it.
+      #
+      # Measured 2026-10-01, mid-backlog with processing-worker at 16 replicas
+      # x 16 concurrency (256 task slots) against pooler-rw's 50 server slots:
+      # SHOW POOLS reported sv_active=25 (the full pool) with 0 idle and 139
+      # clients queued on one pooler-rw pod. Materializing one request's 1,935
+      # extract tasks took 11m56s while consuming 691ms of actual database
+      # time -- ~99.9% of it queueing for a slot. The same contention applies
+      # to MCP, which is a user-facing endpoint.
+      #
+      # This does not fix the underlying N+1 in services._build_tasks (one
+      # get-or-create round trip per task rather than a bulk insert per
+      # dataset); it stops that N+1 from competing with bulk extraction for
+      # connections. Fix both -- the pool protects the whole request path
+      # including MCP, the bulk insert makes materialization fast on its own.
+      enabled: true
+      instances: 2
+      parameters:
+        # Small for the same reason as api: this path is many short
+        # transactions needing low latency, not sustained bulk throughput.
+        # Watch for queueing via the pooler pod's metrics endpoint
+        # (cnpg_pgbouncer_pools_cl_waiting on :9127/metrics) before raising.
+        #
+        # Budget check at chart defaults, primary-facing only: rw 2x20=40,
+        # api 2x10=20, tasks 2x10=20 => 80 of max_connections=100. The ro
+        # pool does not count -- type: ro targets the replicas, each with
+        # their own max_connections. Leaves 20 for direct, admin and
+        # migration Job connections. Any environment overriding the shared
+        # default_pool_size upward must redo this arithmetic.
         default_pool_size: "10"
   backup:
     enabled: false

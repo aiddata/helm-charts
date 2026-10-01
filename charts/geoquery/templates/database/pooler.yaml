@@ -74,6 +74,49 @@ spec:
           {{- toYaml . | nindent 10 }}
         {{- end }}
 {{- end }}
+{{- if .Values.database.pooler.tasks.enabled }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: geoquery-db-pooler-tasks
+  namespace: {{ .Release.Namespace }}
+spec:
+  cluster:
+    name: geoquery-db
+  instances: {{ .Values.database.pooler.tasks.instances }}
+  type: rw
+  pgbouncer:
+    poolMode: {{ .Values.database.pooler.poolMode }}
+    parameters:
+      # Dedicated pool for the request path: background-worker and
+      # geoquery-mcp (see tasks/background.yaml and mcp/mcp-deployment.yaml).
+      # Its own PgBouncer process means its own connection budget, so
+      # processing-worker saturating pooler-rw cannot starve request
+      # materialization or MCP of a slot -- the same isolation api gives the
+      # backend. processing-worker, celery-beat and geoquery-import stay on
+      # the shared pooler-rw.
+      {{- toYaml (merge .Values.database.pooler.tasks.parameters .Values.database.pooler.parameters) | nindent 6 }}
+  template:
+    spec:
+      containers:
+        - name: pgbouncer
+          resources:
+            {{- toYaml .Values.database.pooler.resources | nindent 12 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    cnpg.io/poolerName: geoquery-db-pooler-tasks
+                topologyKey: kubernetes.io/hostname
+        {{- with .Values.database.pooler.nodeAffinity }}
+        nodeAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+{{- end }}
 {{- if .Values.database.pooler.ro.enabled }}
 ---
 apiVersion: postgresql.cnpg.io/v1
