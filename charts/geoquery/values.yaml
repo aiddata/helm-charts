@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:985af18
+  image: ghcr.io/aiddata/geoquery-backend:fb63ff0
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -53,42 +53,23 @@ mcp:
   # Changing it moves both the registered redirect URI and the tool endpoint,
   # so connected clients must be reconnected at the new URL.
   baseUrl: ""
-  # Must be 1 (the chart fails to render otherwise): FastMCP's OAuth proxy
-  # keeps client registrations, in-flight authorization state and upstream
-  # GeoQuery tokens as encrypted files in a single-writer store under
-  # FASTMCP_HOME, so an /authorize request handled by one pod and the
-  # /auth/callback landing on another would fail the handshake. The
-  # deployment uses the Recreate strategy for the same reason: the old pod
-  # releases the state volume before its replacement starts.
-  replicaCount: 1
+  # Any count works. FastMCP's OAuth proxy keeps client registrations,
+  # in-flight authorization state and upstream GeoQuery tokens, encrypted, in
+  # the mcp_oauth_state table, so an /authorize handled by one pod can finish
+  # at /auth/callback on another, and pods are replaced with an ordinary
+  # rolling update. Needs a backend image with that table (mcp_server
+  # migration 0001); older images kept this state on a single-writer volume.
+  # A PodDisruptionBudget keeps one pod up during drains when this is above 1.
+  replicaCount: 3
   # Lifetime of the access token FastMCP gives chat clients. The upstream
   # GeoQuery token remains short-lived and is refreshed transparently. Needs a
   # backend image that reads MCP_ACCESS_TOKEN_EXPIRY_SECONDS.
   accessTokenExpirySeconds: 2592000 # 30 days
-  # FastMCP's state (FASTMCP_HOME=/var/lib/fastmcp) lives on a PVC so pod
-  # replacements and image upgrades keep clients signed in. Deleting the PVC or
-  # rotating jwtSigningKey forces every client to reconnect.
-  persistence:
-    # Setting this to false falls back to an emptyDir: every pod replacement
-    # then logs out all MCP clients.
-    enabled: true
-
-    # Use an already-created PVC when non-empty. The chart must not create its
-    # own PVC in that case. For an NFS-backed claim, make sure the directory is
-    # already writable by volumes.requests.runAsUser/runAsGroup, since NFS may
-    # ignore fsGroup. Use this when the cluster cannot dynamically provision.
-    existingClaim: ""
-
-    # Used only for a chart-created PVC (geoquery-mcp-state). Empty uses the
-    # cluster's default StorageClass.
-    storageClassName: ""
-    accessModes:
-      - ReadWriteOnce
-    size: 1Gi
-
-    # Preserve registrations and tokens if the Helm release is removed.
-    annotations:
-      helm.sh/resource-policy: keep
+  # Most connections each pod opens for that OAuth state (asyncpg, opened on
+  # demand). They go through the same pooler as the pod's other writes
+  # (pooler-tasks when enabled), so they add client connections, not server
+  # ones: the pool budget in database.pooler is unchanged.
+  statePoolSize: 4
   resources:
     requests:
       cpu: 100m
@@ -103,10 +84,12 @@ mcp:
   oidcClientSecret:
     secretName: geoquery-mcp-oidc-client
     key: password
-  # Signs the tokens the OAuth proxy issues and derives the encryption key
-  # for its on-disk store. Must be stable across restarts -- rotating it
-  # invalidates every issued token (even though the state PVC persists) and
-  # forces every client to re-register. Keep mcp.oidcClientSecret and
+  # Signs the tokens the OAuth proxy issues, and derives the key encrypting
+  # its state in mcp_oauth_state and the key sealing submit_request's
+  # confirmation round trip. Every replica reads the same Secret, which is
+  # what lets them share that state. Must be stable across restarts --
+  # rotating it invalidates every issued token and forces every client to
+  # re-register. Keep mcp.oidcClientSecret and
   # geoquery.oidcPrivateKey stable too. The chart only reads this from the
   # Secret; never generate it during deployment.
   # Generate with `openssl rand -base64 48`.

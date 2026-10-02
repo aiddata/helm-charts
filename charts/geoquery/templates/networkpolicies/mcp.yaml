@@ -84,6 +84,12 @@ spec:
         - podSelector:
             matchLabels:
               cnpg.io/poolerName: geoquery-db-pooler-rw
+        {{- if .Values.database.pooler.tasks.enabled }}
+        # PG_RW_HOST, and with it the OAuth state store, when this pool exists.
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: geoquery-db-pooler-tasks
+        {{- end }}
         {{- if .Values.database.pooler.ro.enabled }}
         - podSelector:
             matchLabels:

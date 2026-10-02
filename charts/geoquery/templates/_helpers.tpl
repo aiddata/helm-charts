@@ -78,11 +78,3 @@ them and the proxy would route a path the server does not serve.
 {{- define "geoquery.mcpPath" -}}
 {{- if include "geoquery.mcpDedicatedHost" . }}/{{ else }}/mcp{{ end -}}
 {{- end -}}
-
-{{/*
-Name of the PVC holding FastMCP's state: mcp.persistence.existingClaim when
-set, else the chart-created geoquery-mcp-state (templates/mcp/mcp-pvc.yaml).
-*/}}
-{{- define "geoquery.mcpStateClaimName" -}}
-{{- .Values.mcp.persistence.existingClaim | default "geoquery-mcp-state" -}}
-{{- end -}}

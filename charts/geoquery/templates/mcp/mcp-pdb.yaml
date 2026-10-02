@@ -1,0 +1,14 @@
+{{- if and .Values.mcp.enabled (gt (int .Values.mcp.replicaCount) 1) }}
+# Keeps one MCP pod serving while a node drain evicts the others. Only with
+# more than one replica: with one, minAvailable 1 would block the drain.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: geoquery-mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: geoquery-mcp
+{{- end }}
