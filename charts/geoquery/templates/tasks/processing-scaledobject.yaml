@@ -70,8 +70,11 @@ spec:
         sslmode: {{ $autoscaling.postgres.sslmode | quote }}
         # Pending extract tasks, served by the partial index from analytics
         # migration 0014. Rows already claimed for dispatch (status 3) number
-        # at most one per worker slot and are deliberately left out.
-        query: "SELECT count(*) FROM extract_tasks WHERE status = 0"
+        # at most one per worker slot and are deliberately left out. The count
+        # stops at maxReplicas * pendingTasksPerReplica: past that the HPA is
+        # already pinned at maxReplicas, so counting further only makes the
+        # index scan longer on a large backlog.
+        query: "SELECT count(*) FROM (SELECT 1 FROM extract_tasks WHERE status = 0 LIMIT {{ mul (int $autoscaling.maxReplicas) (int $autoscaling.pendingTasksPerReplica) }}) s"
         # Target average per replica: the HPA sizes to ceil(count / value).
         targetQueryValue: {{ $autoscaling.pendingTasksPerReplica | quote }}
 {{- end }}

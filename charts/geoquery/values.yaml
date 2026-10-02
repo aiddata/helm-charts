@@ -326,7 +326,7 @@ tasks:
       # with the defaults above: 12 pods above 6000 pending, 6 at 3000, and
       # the floor of 2 once the backlog is under 1000. Set it from how far
       # down the backlog should get before workers start being shed.
-      pendingTasksPerReplica: 500
+      pendingTasksPerReplica: 5000
       # How often KEDA runs the count query. The result is cached and served
       # to the HPA on its own sync cycle, so this is the only place the
       # database is polled from.
