@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:ed93e95
+  image: ghcr.io/aiddata/geoquery-backend:ec2eac1
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -250,11 +250,20 @@ tasks:
     # one process per CPU core, which on large nodes forks dozens of
     # Django-loaded processes and multiplies idle memory accordingly.
     concurrency: 4
-    # How many build_extract_tasks_worker tasks one hourly build wave fans
+    # How many build_extract_tasks_worker tasks one build wave fans
     # out to (N_EXTRACT_TASK_BUILDERS). Each holds a pooler connection for
     # its whole INSERT batch, so more builders trade extract throughput for
     # build-out speed.
     extractTaskBuilders: 1
+    # Newly created extract tasks per INSERT transaction
+    # (EXTRACT_TASK_BUILD_BATCH_SIZE). Must be positive. Also used by
+    # management commands in the backend pod.
+    extractTaskBuildBatchSize: 5000
+    # Newly created tasks per builder invocation (EXTRACT_TASK_BUILD_MAX_TASKS).
+    # 0 means unlimited. Each global builder gets its own budget; the
+    # non-global branch has a separate budget. The backend management command
+    # shares one budget across its global and non-global branches.
+    extractTaskBuildMaxTasks: 0
     resources:
       requests:
         cpu: 100m
@@ -339,6 +348,11 @@ tasks:
         periodSeconds: 300
   beat:
     enabled: true
+    # Seconds between build triggers (EXTRACT_TASK_BUILD_INTERVAL_SECONDS).
+    # Must be positive. Healthy global waves reject overlapping launches.
+    # Crashed-wave recovery can take the stale window plus one interval;
+    # fresh Beat schedule state also delays the first trigger by one interval.
+    extractTaskBuildIntervalSeconds: 600
 
 rabbitmq:
   resources:

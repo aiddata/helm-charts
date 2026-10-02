@@ -38,6 +38,8 @@ spec:
             - "--loglevel=info"
             - "--schedule=/tmp/celerybeat-schedule"
           env:
+            - name: EXTRACT_TASK_BUILD_INTERVAL_SECONDS
+              value: {{ .Values.tasks.beat.extractTaskBuildIntervalSeconds | quote }}
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
