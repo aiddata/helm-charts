@@ -1,0 +1,307 @@
+{{- if .Values.metrics.enabled }}
+{{- /*
+  Custom queries for the CloudNativePG metrics exporter, wired into the Cluster
+  through spec.monitoring.customQueriesConfigMap in database.yaml. Each query's
+  columns become cnpg_<query name>_<column>, scraped by the geoquery-db
+  PodMonitor alongside CNPG's default set. The defaults already cover
+  pg_stat_wal (cnpg_collector_wal_*), pg_stat_checkpointer, pg_stat_database
+  and replication; these add what the extract task write path needs on top.
+
+  The exporter runs every query on every scrape (metrics.podMonitor.interval,
+  30s by default), so each one must stay cheap at full table size. All of them
+  read statistics views or the catalog, except geoquery_requests, which scans
+  the small requests table.
+
+  Every query must return unique label sets. A duplicate makes the whole
+  scrape fail, not just that query -- hence the GROUP BYs on queries that look
+  like they would not need one.
+
+  primary: true runs a query on the primary only: on a replica its table
+  counters are zero (writes happen on the primary) and the catalog-derived
+  numbers would just repeat the primary's three times.
+
+  The cnpg.io/reload label makes the operator pick up edits without a restart.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: geoquery-db-monitoring
+  namespace: {{ .Release.Namespace }}
+  labels:
+    cnpg.io/reload: ""
+data:
+  queries: |
+    # What client backends are doing right now, by wait event. Sampled every
+    # scrape, this is database.md's first measurement recipe ("what is
+    # actually waiting, and on what") made continuous. An active backend with
+    # no wait event is on CPU, reported as CPU/Running. idle in transaction is
+    # kept: it is a pooler server slot held while doing nothing.
+    geoquery_wait_events:
+      query: |
+        SELECT COALESCE(datname, '') AS datname
+          , state
+          , COALESCE(wait_event_type, 'CPU') AS wait_event_type
+          , COALESCE(wait_event, 'Running') AS wait_event
+          , count(*) AS backends
+        FROM pg_catalog.pg_stat_activity
+        WHERE backend_type = 'client backend'
+          AND state IS NOT NULL
+          AND state <> 'idle'
+          AND pid <> pg_catalog.pg_backend_pid()
+        GROUP BY 1, 2, 3, 4
+      metrics:
+        - datname:
+            usage: "LABEL"
+            description: "Database"
+        - state:
+            usage: "LABEL"
+            description: "Backend state"
+        - wait_event_type:
+            usage: "LABEL"
+            description: "Wait event type, or CPU when not waiting"
+        - wait_event:
+            usage: "LABEL"
+            description: "Wait event, or Running when not waiting"
+        - backends:
+            usage: "GAUGE"
+            description: "Client backends in this state and wait event"
+
+    # Row and size counters for the two partitioned tables, summed over their
+    # partitions. pg_stat_user_tables only has rows for the leaf partitions,
+    # never the parent. Partitions come from pg_inherits rather than a name
+    # pattern, which would miss extract_tasks_default.
+    #
+    # extract_tasks rows_inserted is task creation (builder plus request
+    # materialization); rows_updated is roughly three per processed task
+    # (claim 0->3, start 3->2, finish 2->1) plus sweep resets;
+    # rows_hot_updated / rows_updated is the HOT ratio from database.md
+    # section 3. extract_data rows_inserted is processing's result writes.
+    geoquery_partitioned_tables:
+      primary: true
+      target_databases: ["app"]
+      query: |
+        SELECT p.relname AS relation
+          , count(*) AS partitions
+          , sum(s.n_tup_ins) AS rows_inserted
+          , sum(s.n_tup_upd) AS rows_updated
+          , sum(s.n_tup_hot_upd) AS rows_hot_updated
+          , sum(s.n_tup_del) AS rows_deleted
+          , sum(s.n_live_tup) AS live_rows
+          , sum(s.n_dead_tup) AS dead_rows
+          , sum(pg_catalog.pg_table_size(s.relid)) AS table_bytes
+          , sum(pg_catalog.pg_indexes_size(s.relid)) AS index_bytes
+        FROM pg_catalog.pg_inherits h
+        JOIN pg_catalog.pg_class p ON p.oid = h.inhparent
+        JOIN pg_catalog.pg_stat_user_tables s ON s.relid = h.inhrelid
+        WHERE p.relname IN ('extract_tasks', 'extract_data')
+          AND p.relkind = 'p'
+        GROUP BY p.relname
+      metrics:
+        - relation:
+            usage: "LABEL"
+            description: "Partitioned table"
+        - partitions:
+            usage: "GAUGE"
+            description: "Number of partitions"
+        - rows_inserted:
+            usage: "COUNTER"
+            description: "Rows inserted, summed over partitions"
+        - rows_updated:
+            usage: "COUNTER"
+            description: "Rows updated, including HOT updates, summed over partitions"
+        - rows_hot_updated:
+            usage: "COUNTER"
+            description: "Rows updated without touching any index (HOT), summed over partitions"
+        - rows_deleted:
+            usage: "COUNTER"
+            description: "Rows deleted, summed over partitions"
+        - live_rows:
+            usage: "GAUGE"
+            description: "Estimated live rows, summed over partitions"
+        - dead_rows:
+            usage: "GAUGE"
+            description: "Estimated dead rows awaiting vacuum, summed over partitions"
+        - table_bytes:
+            usage: "GAUGE"
+            description: "Heap and TOAST size, summed over partitions"
+        - index_bytes:
+            usage: "GAUGE"
+            description: "Index size, summed over partitions"
+
+    # Rows covered by each status-filtered partial index on extract_tasks,
+    # which is how many tasks are in each state: extract_tasks_pending_idx (status 0),
+    # extract_tasks_stale_claims_idx (2, 3), extract_tasks_errored_idx (-1).
+    #
+    # An ESTIMATE: pg_class.reltuples, refreshed whenever autovacuum vacuums or
+    # analyzes a partition, so a busy partition's figure trails reality by up
+    # to one autovacuum cycle. Deliberately not count(*): that is an index scan
+    # over every pending row, tens of millions at a time, every 30 seconds.
+    geoquery_extract_task_states:
+      primary: true
+      target_databases: ["app"]
+      query: |
+        SELECT pi.relname AS index
+          , sum(GREATEST(ci.reltuples, 0)) AS estimated_rows
+        FROM pg_catalog.pg_index px
+        JOIN pg_catalog.pg_class pi ON pi.oid = px.indexrelid
+        JOIN pg_catalog.pg_inherits h ON h.inhparent = px.indexrelid
+        JOIN pg_catalog.pg_class ci ON ci.oid = h.inhrelid
+        WHERE px.indrelid = pg_catalog.to_regclass('public.extract_tasks')
+          AND pg_catalog.pg_get_expr(px.indpred, px.indrelid) LIKE '%status%'
+        GROUP BY pi.relname
+      metrics:
+        - index:
+            usage: "LABEL"
+            description: "Partial index on extract_tasks"
+        - estimated_rows:
+            usage: "GAUGE"
+            description: "Estimated rows matching the index predicate, as of each partition's last vacuum or analyze"
+
+    # Requests by status, with the age of the oldest. Statuses: 4 creating
+    # its extract tasks, -1 tasks created and awaiting its first sweep, 0
+    # waiting on its tasks, 2 a sweep is building its output, 1 complete,
+    # -2 failed. The oldest age is what makes a stranded request
+    # visible -- database.md section 8 records one that sat at status 4 for
+    # four days looking identical to one submitted a second earlier.
+    geoquery_requests:
+      primary: true
+      target_databases: ["app"]
+      query: |
+        SELECT COALESCE(status::text, 'null') AS status
+          , count(*) AS requests
+          , COALESCE(EXTRACT(EPOCH FROM (now() - min(submit_time))), 0) AS oldest_age_seconds
+        FROM public.requests
+        GROUP BY 1
+      metrics:
+        - status:
+            usage: "LABEL"
+            description: "Request status"
+        - requests:
+            usage: "GAUGE"
+            description: "Requests in this status"
+        - oldest_age_seconds:
+            usage: "GAUGE"
+            description: "Seconds since the oldest request in this status was submitted"
+
+    # Cluster I/O by process type, from pg_stat_io: who is reading, writing
+    # and fsyncing relation data. Byte columns multiply operations by
+    # op_bytes, which PostgreSQL 18 removes in favour of *_bytes columns --
+    # hence the version range, so an upgrade stops this query instead of
+    # failing it.
+    geoquery_io:
+      runonserver: ">=17.0.0 <18.0.0"
+      query: |
+        SELECT backend_type
+          , context
+          , sum(COALESCE(reads, 0) * op_bytes) AS read_bytes
+          , sum(COALESCE(writes, 0) * op_bytes) AS write_bytes
+          , sum(COALESCE(extends, 0) * op_bytes) AS extend_bytes
+          , sum(COALESCE(hits, 0)) AS hits
+          , sum(COALESCE(evictions, 0)) AS evictions
+          , sum(COALESCE(fsyncs, 0)) AS fsyncs
+        FROM pg_catalog.pg_stat_io
+        GROUP BY backend_type, context
+      metrics:
+        - backend_type:
+            usage: "LABEL"
+            description: "Process type"
+        - context:
+            usage: "LABEL"
+            description: "I/O context: normal, vacuum, bulkread or bulkwrite"
+        - read_bytes:
+            usage: "COUNTER"
+            description: "Bytes read from storage"
+        - write_bytes:
+            usage: "COUNTER"
+            description: "Bytes written to the kernel"
+        - extend_bytes:
+            usage: "COUNTER"
+            description: "Bytes added by extending relations"
+        - hits:
+            usage: "COUNTER"
+            description: "Shared buffer hits"
+        - evictions:
+            usage: "COUNTER"
+            description: "Buffers evicted to make room for another"
+        - fsyncs:
+            usage: "COUNTER"
+            description: "fsync calls made by this process type rather than the checkpointer"
+
+    # The 20 statements with the most cumulative execution time on each
+    # instance, from pg_stat_statements (enabled by the pg_stat_statements.*
+    # parameters in values.yaml). Grouped by queryid and database because the
+    # view has a row per role too, and duplicate label sets fail the scrape.
+    # The top 20 shifts over time, so a statement's series can start and stop.
+    #
+    # The top 20 is picked from the counters alone (pg_stat_statements(false)),
+    # and text is fetched and cleaned only for those. Multi-row INSERTs
+    # (bulk_create, the builder, request_map's UNNEST) get a separate entry per
+    # row count, with texts of up to ~700 kB: measured on prod 2026-10-02, 412
+    # of 1,954 entries held 8.3 MB of text. Running regexp_replace over every
+    # entry before the LIMIT took 515-580 ms per scrape; this form took
+    # 22-28 ms, of which ~20 ms is PostgreSQL reading the text file at all.
+    geoquery_statements:
+      target_databases: ["app"]
+      query: |
+        WITH top AS (
+          SELECT queryid
+            , dbid
+            , sum(calls) AS calls
+            , sum(total_exec_time) AS exec_ms
+            , sum(rows) AS rows
+            , sum(shared_blks_hit) AS shared_blks_hit
+            , sum(shared_blks_read) AS shared_blks_read
+            , sum(wal_bytes) AS wal_bytes
+          FROM pg_stat_statements(false)
+          WHERE queryid IS NOT NULL
+          GROUP BY queryid, dbid
+          ORDER BY sum(total_exec_time) DESC
+          LIMIT 20
+        ), texts AS (
+          SELECT DISTINCT ON (s.queryid, s.dbid) s.queryid
+            , s.dbid
+            , left(s.query, 1000) AS query
+          FROM pg_stat_statements(true) s
+          JOIN top USING (queryid, dbid)
+        )
+        SELECT top.queryid::text AS queryid
+          , COALESCE(d.datname, '') AS datname
+          , left(regexp_replace(COALESCE(t.query, ''), '\s+', ' ', 'g'), 160) AS query
+          , top.calls
+          , top.exec_ms / 1000 AS exec_seconds
+          , top.rows
+          , top.shared_blks_hit
+          , top.shared_blks_read
+          , top.wal_bytes::float8 AS wal_bytes
+        FROM top
+        LEFT JOIN texts t USING (queryid, dbid)
+        LEFT JOIN pg_catalog.pg_database d ON d.oid = top.dbid
+      metrics:
+        - queryid:
+            usage: "LABEL"
+            description: "pg_stat_statements query id"
+        - datname:
+            usage: "LABEL"
+            description: "Database"
+        - query:
+            usage: "LABEL"
+            description: "Normalized query text, truncated to 160 characters"
+        - calls:
+            usage: "COUNTER"
+            description: "Times executed"
+        - exec_seconds:
+            usage: "COUNTER"
+            description: "Total execution time in seconds"
+        - rows:
+            usage: "COUNTER"
+            description: "Rows returned or affected"
+        - shared_blks_hit:
+            usage: "COUNTER"
+            description: "Shared buffer hits"
+        - shared_blks_read:
+            usage: "COUNTER"
+            description: "Shared blocks read from storage"
+        - wal_bytes:
+            usage: "COUNTER"
+            description: "WAL generated in bytes"
+{{- end }}

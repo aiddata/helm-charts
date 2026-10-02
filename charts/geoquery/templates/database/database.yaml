@@ -72,6 +72,14 @@ spec:
   postgresql:
     parameters:
       {{- toYaml .Values.database.postgresql.parameters | nindent 6 }}
+  {{- if .Values.metrics.enabled }}
+  monitoring:
+    # Extract task write-path queries, on top of CNPG's default set. See
+    # monitoring-queries.yaml.
+    customQueriesConfigMap:
+      - name: geoquery-db-monitoring
+        key: queries
+  {{- end }}
   {{- if .Values.database.recover.enabled }}
   bootstrap:
     recovery:

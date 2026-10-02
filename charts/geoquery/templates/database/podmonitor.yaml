@@ -15,6 +15,11 @@ spec:
   selector:
     matchLabels:
       cnpg.io/cluster: geoquery-db
+      # PostgreSQL instances only. Pooler pods carry cnpg.io/cluster too and
+      # also name a port "metrics", so without this every PgBouncer was scraped
+      # here as well as by pooler-podmonitor.yaml -- doubling any sum over
+      # cnpg_pgbouncer_* for the poolers that had their own PodMonitor.
+      cnpg.io/podRole: instance
   namespaceSelector:
     matchNames:
       - {{ .Release.Namespace }}
@@ -22,6 +27,13 @@ spec:
     - port: metrics
       interval: {{ .Values.metrics.podMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+      relabelings:
+        # primary | replica, so panels can select the primary without knowing
+        # which pod holds it. CNPG relabels the pods on failover, so a
+        # switchover starts new series under the new role instead of splicing
+        # two instances' counters together.
+        - sourceLabels: [__meta_kubernetes_pod_label_cnpg_io_instanceRole]
+          targetLabel: role
 {{- end }}
 {{- end }}
 {{- end }}

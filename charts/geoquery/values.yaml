@@ -576,8 +576,10 @@ database:
       # make room for the dedicated api pool without raising the combined
       # ceiling.
       default_pool_size: "20"
-      # Inert today (the backend uses psycopg2, which never prepares
-      # server-side), but required if the backend ever moves to psycopg 3.
+      # Inert today: the backend runs psycopg 3 with client-side binding
+      # (server_side_binding unset), and the MCP server's asyncpg pool has its
+      # statement cache disabled, so neither prepares named statements. Needed
+      # if either ever does.
       max_prepared_statements: "100"
     resources:
       requests:
@@ -711,10 +713,14 @@ metrics:
   #     the django-prometheus endpoint on the dedicated metrics port (9091)
   #   - a PodMonitor is created for the processing workers so Prometheus
   #     scrapes the extract task metrics (geoquery_extract_*), also on 9091
-  #   - a PodMonitor is created for the database cluster so Prometheus can
-  #     scrape the PostgreSQL metrics endpoint (port 9187)
-  #   - a PodMonitor is created for each enabled PgBouncer pooler so Prometheus
-  #     can scrape the cnpg_pgbouncer_* metrics endpoint (port 9127)
+  #   - a PodMonitor is created for the database instances so Prometheus can
+  #     scrape the PostgreSQL metrics endpoint (port 9187), labelled with
+  #     role=primary|replica. metrics.enabled also adds the custom queries in
+  #     templates/database/monitoring-queries.yaml to that endpoint
+  #     (cnpg_geoquery_*: wait events, extract table counters, task state
+  #     estimates, requests by status, pg_stat_io, top statements)
+  #   - one PodMonitor covers every PgBouncer pooler, scraping the
+  #     cnpg_pgbouncer_* metrics endpoint (port 9127) with a pooler=rw|ro|api|tasks label
   #   - two PodMonitors are created for the RabbitMQ cluster, both scraping the
   #     rabbitmq_prometheus endpoint (port 15692): one for the aggregated
   #     node-level metrics, one for the per-queue depths on /metrics/detailed
@@ -727,9 +733,10 @@ metrics:
   # Ships charts/geoquery/dashboards/geoquery.json as a ConfigMap for the
   # Grafana sidecar to pick up. Requires metrics.enabled above. The dashboard
   # reads the series the PodMonitors above scrape — mostly django-prometheus,
-  # plus rabbitmq_detailed_queue_* for the Task Queues row and
-  # geoquery_extract_* for the Extract Tasks row — so it is only
-  # useful where those PodMonitors are also running.
+  # plus cnpg_pgbouncer_* for Connection Pooling, rabbitmq_detailed_queue_*
+  # for Task Queues, geoquery_extract_* for Extract Tasks, and cnpg_* (including
+  # the custom cnpg_geoquery_* queries) for Database Write Path and Extract
+  # Task State — so it is only useful where those PodMonitors are also running.
   grafanaDashboard:
     enabled: true
 
