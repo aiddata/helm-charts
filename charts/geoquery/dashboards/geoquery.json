@@ -3614,7 +3614,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Fraction of time the fleet-wide claim lock is held by a processing worker's claim. Near 100%, the claim is the throughput ceiling and more slots will only add lock wait. Top-ups from the beat on the background worker are not scraped, so the true figure is slightly higher.",
+          "description": "Fraction of time the fleet-wide claim lock is held by a processing worker's claim. Near 100%, the claim is the throughput ceiling and more slots will only add lock wait. The dashed line marks 90%, above which the claim is likely limiting throughput. Top-ups from the beat on the background worker are not scraped, so the true figure is slightly higher.",
           "fieldConfig": {
             "defaults": {
               "color": {
