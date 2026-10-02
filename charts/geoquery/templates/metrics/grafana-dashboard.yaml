@@ -22,7 +22,14 @@ data:
   # identity (uid/title) and the default value of the `namespace` template
   # variable. Every panel query filters on $namespace, so none of them need
   # rewriting here.
-  geoquery.json: |-
+  #
+  # The key is the file name the Grafana sidecar writes, into one flat folder
+  # shared by every namespace it watches -- so it must be unique per release,
+  # like the uid. As a fixed `geoquery.json`, prod and staging overwrote each
+  # other's file, and Grafana, which ties a provisioned file to one dashboard,
+  # rejected every save from whichever release did not own it ("A dashboard
+  # with the same uid already exists"), leaving that dashboard frozen.
+  {{ $uid }}.json: |-
 {{ .Files.Get "dashboards/geoquery.json"
      | replace "PLACEHOLDER_NAMESPACE" $ns
      | replace "PLACEHOLDER_TITLE" $title
