@@ -346,7 +346,7 @@ tasks:
         # "prefer" negotiates it when offered without failing when not.
         sslmode: prefer
       scaleUp:
-        podsPerPeriod: 4
+        podsPerPeriod: 1
         periodSeconds: 60
       scaleDown:
         # Backlog must stay low for this long before any pod is removed.
