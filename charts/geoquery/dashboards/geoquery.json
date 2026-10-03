@@ -3085,7 +3085,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Tasks published and waiting for a worker to pick them up. A flat non-zero line on background or processing means the queue is not draining. RabbitMQ reports a queue only from the node hosting it, so this is a max across nodes rather than a sum.",
+          "description": "Tasks published and waiting for a worker to pick them up. A flat non-zero line on background means the queue is not draining. RabbitMQ reports a queue only from the node hosting it, so this is a max across nodes rather than a sum. Extract tasks no longer go through RabbitMQ, so processing stays empty.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3767,7 +3767,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Worker slots, by what they are doing: running tasks, dispatching the next batch (claim lock wait, claim and publish), or idle waiting for their next message. The stack should come to roughly the fleet's slot count (replicas \u00d7 concurrency); a shortfall is time none of these cover, such as Celery overhead or children being recycled.",
+          "description": "Worker slots, by what they are doing: running tasks, claiming the next chunk (claim lock wait and claim), or idle between chunks (including the wait after finding the queue empty). The stack should come to roughly the fleet's slot count (replicas \u00d7 concurrency); a shortfall is time none of these cover, such as releasing a chunk, closing connections, or worker processes being recycled.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3885,7 +3885,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Fraction of time the fleet-wide claim lock is held by a processing worker's claim. Near 100%, the claim is the throughput ceiling and more slots will only add lock wait. The dashed line marks 90%, above which the claim is likely limiting throughput. Top-ups from the beat on the background worker are not scraped, so the true figure is slightly higher.",
+          "description": "Fraction of time the fleet-wide claim lock is held by a processing worker's claim. Near 100%, the claim is the throughput ceiling and more slots will only add lock wait; raise claimBatch so each claim takes more tasks. The dashed line marks 90%, above which the claim is likely limiting throughput.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4105,7 +4105,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Time a worker process waits between finishing one batch (after publishing its successor) and starting the next, which is purely message delivery.",
+          "description": "Time a worker process waits between finishing one chunk and claiming the next. Normally near zero; a slot that found the queue empty waits about EXTRACT_WORKER_IDLE_SECONDS (60s by default) before claiming again.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4217,6 +4217,133 @@
             }
           ],
           "title": "Slot Idle Gap",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Wall time from claiming a chunk of extract tasks to finishing or releasing all of it. The chunk's rows sit in status 2 that long, and free_stale_processing_tasks returns them to pending after STALE_TASK_MINUTES (30), after which they run twice. Yellow from 15 minutes, red from 25: lower the processing claimBatch before it gets there. max is the upper bound of the highest bucket that saw a chunk.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed+area"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 900
+                  },
+                  {
+                    "color": "red",
+                    "value": 1500
+                  }
+                ]
+              },
+              "unit": "s",
+              "min": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 91
+          },
+          "id": 70,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.5, sum by (le) (rate(geoquery_extract_chunk_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])))",
+              "legendFormat": "p50",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(geoquery_extract_chunk_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])))",
+              "legendFormat": "p99",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(1, sum by (le) (rate(geoquery_extract_chunk_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])))",
+              "legendFormat": "max",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Chunk Duration",
           "type": "timeseries"
         }
       ],

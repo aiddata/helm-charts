@@ -20,13 +20,16 @@ spec:
       labels:
         app: geoquery-processing-worker
     spec:
-      terminationGracePeriodSeconds: 900
+      # On SIGTERM the extract worker finishes the task each process is on and
+      # releases the rest of its chunk to pending, so this only has to cover
+      # one task per process.
+      terminationGracePeriodSeconds: {{ .Values.tasks.processing.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
       containers:
-        - name: celery-worker
+        - name: extract-worker
           image: {{ .Values.backend.image }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -34,16 +37,12 @@ spec:
             capabilities:
               drop:
                 - ALL
-          command: ["/app/.venv/bin/celery"]
+          # Python itself is PID 1 and handles SIGTERM (no shell in between).
+          command: ["/app/.venv/bin/python", "/app/backend/manage.py", "run_extract_worker"]
           args:
-            - "-A"
-            - "geoquery"
-            - "worker"
-            - "--loglevel=info"
-            - "-Q"
-            - "processing"
             - "--concurrency={{ .Values.tasks.processing.concurrency | default 1 }}"
-            - "--max-tasks-per-child={{ .Values.tasks.processing.maxTasksPerChild }}"
+            - "--max-chunks-per-child={{ .Values.tasks.processing.maxTasksPerChild }}"
+            - "--idle-seconds={{ .Values.tasks.processing.idleSeconds }}"
           resources:
             {{- toYaml .Values.tasks.processing.resources | nindent 12 }}
           {{- if .Values.metrics.enabled }}
@@ -96,25 +95,9 @@ spec:
                   key: password
             - name: PROTOMAPS_API_KEY
               value: {{ .Values.protomaps.key }}
-            - name: RABBITMQ_HOST
-              value: "geoquery-rabbitmq.{{ .Release.Namespace }}.svc.cluster.local"
-            - name: RABBITMQ_PORT
-              value: "5672"
-            - name: RABBITMQ_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: geoquery-rabbitmq-default-user
-                  key: username
-            - name: RABBITMQ_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: geoquery-rabbitmq-default-user
-                  key: password
-            - name: CELERY_BROKER_URL
-              value: "amqp://$(RABBITMQ_USERNAME):$(RABBITMQ_PASSWORD)@$(RABBITMQ_HOST):$(RABBITMQ_PORT)//"
             {{- if .Values.metrics.enabled }}
-            # The Celery parent serves the extract task metrics on 9091, summed
-            # from per-process files the prefork children write under
+            # The extract worker's parent serves the extract task metrics on
+            # 9091, summed from per-process files its children write under
             # PROMETHEUS_MULTIPROC_DIR (created on start, inside the /tmp
             # emptyDir). PROMETHEUS_ENABLED stays unset here: django-prometheus's
             # own exporter would run in the parent and miss the children.

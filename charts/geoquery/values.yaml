@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:1b664d3
+  image: ghcr.io/aiddata/geoquery-backend:94c9651
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -274,16 +274,24 @@ tasks:
   processing:
     replicaCount: 8
     concurrency: 16
-    # Extract tasks claimed per Celery message (EXTRACT_TASK_CLAIM_BATCH).
-    # Also set on the background worker, where the beat's top-up
-    # (dispatch_processing_tasks) multiplies idle slots by it, so both roles
-    # always get the same value.
+    # Extract tasks one claim takes: the chunk a worker process runs before
+    # claiming again (EXTRACT_TASK_CLAIM_BATCH). Keep claimBatch x the mean
+    # task time well under the 30-minute stale-task reaper; the dashboard's
+    # Chunk Duration panel shows how close it gets.
     claimBatch: 64
-    # Celery --max-tasks-per-child. This counts messages, not extract tasks,
-    # so a process lives for roughly maxTasksPerChild * claimBatch tasks
-    # before it is recycled. Lower it when raising claimBatch so memory that
-    # creeps up per task (rasterio/GDAL) is still reclaimed as often.
+    # run_extract_worker --max-chunks-per-child. This counts chunks, not
+    # extract tasks, so a process lives for roughly maxTasksPerChild *
+    # claimBatch tasks before it is recycled. Lower it when raising claimBatch
+    # so memory that creeps up per task (rasterio/GDAL) is still reclaimed as
+    # often.
     maxTasksPerChild: 1000
+    # Seconds a worker process waits after finding no pending tasks before
+    # claiming again (EXTRACT_WORKER_IDLE_SECONDS). Also the longest a new
+    # request's tasks wait for an idle worker to notice them.
+    idleSeconds: 60
+    # On SIGTERM each process finishes its current task and releases the rest
+    # of its chunk, so this only needs to cover the slowest single task.
+    terminationGracePeriodSeconds: 300
     # Requests only, no limits. A processing task's CPU and memory use swing
     # widely with the size of the query, so a limit would either throttle a
     # pod that has idle cores available to it or OOM-kill a legitimately
@@ -300,11 +308,9 @@ tasks:
     # count and replicaCount above is ignored.
     #
     # The signal is the number of pending rows in extract_tasks, read from
-    # PostgreSQL -- not RabbitMQ queue depth. Extract tasks self-chain (each
-    # one claims and dispatches its successor on completion) and the beat only
-    # tops up idle slots, so the RabbitMQ queue stays near-empty by design and
-    # says nothing about how much work remains. The count query is backed by
-    # a partial index on status = 0 (analytics migration 0014).
+    # PostgreSQL: the extract worker claims its work from that table directly,
+    # so it is the queue. The count query is backed by a partial index on
+    # status = 0 (analytics migration 0014).
     autoscaling:
       enabled: false
       # Keep a floor of warm workers: the backend image loads Django on start,

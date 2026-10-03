@@ -46,8 +46,8 @@ spec:
     matchNames:
       - {{ .Release.Namespace }}
   podMetricsEndpoints:
-    # The Celery parent serves the extract task metrics, summed across its
-    # prefork children, on the "metrics" port (9091).
+    # The extract worker's parent serves the extract task metrics, summed
+    # across its child processes, on the "metrics" port (9091).
     - port: metrics
       path: {{ .Values.metrics.path }}
       interval: {{ .Values.metrics.podMonitor.interval }}

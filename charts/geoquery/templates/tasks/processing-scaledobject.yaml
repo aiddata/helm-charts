@@ -48,9 +48,10 @@ spec:
             - type: Pods
               value: {{ $autoscaling.scaleUp.podsPerPeriod }}
               periodSeconds: {{ $autoscaling.scaleUp.periodSeconds }}
-        # Removing a worker interrupts up to `concurrency` in-flight tasks, so
-        # shed capacity slowly and only after the backlog has stayed low for a
-        # while. One pod at a time keeps the drain cost bounded.
+        # Removing a worker waits on up to `concurrency` in-flight tasks and
+        # hands the rest of their chunks back to the queue, so shed capacity
+        # slowly and only after the backlog has stayed low for a while. One
+        # pod at a time keeps the drain cost bounded.
         scaleDown:
           stabilizationWindowSeconds: {{ $autoscaling.scaleDown.stabilizationWindowSeconds }}
           policies:
@@ -69,8 +70,9 @@ spec:
         dbName: {{ $autoscaling.postgres.dbName | quote }}
         sslmode: {{ $autoscaling.postgres.sslmode | quote }}
         # Pending extract tasks, served by the partial index from analytics
-        # migration 0014. Rows already claimed for dispatch (status 3) number
-        # at most one per worker slot and are deliberately left out. The count
+        # migration 0014. Rows already claimed (status 2) are being worked on
+        # and number at most one chunk per worker process, so they are
+        # deliberately left out. The count
         # stops at maxReplicas * pendingTasksPerReplica: past that the HPA is
         # already pinned at maxReplicas, so counting further only makes the
         # index scan longer on a large backlog.

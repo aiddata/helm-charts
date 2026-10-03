@@ -51,8 +51,6 @@ spec:
               value: {{ .Values.tasks.background.extractTaskBuildBatchSize | quote }}
             - name: EXTRACT_TASK_BUILD_MAX_TASKS
               value: {{ .Values.tasks.background.extractTaskBuildMaxTasks | quote }}
-            - name: EXTRACT_TASK_CLAIM_BATCH
-              value: "{{ .Values.tasks.processing.claimBatch }}"
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
