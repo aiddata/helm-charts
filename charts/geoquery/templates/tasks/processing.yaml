@@ -32,6 +32,11 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+      {{- with .Values.tasks.processing.nodeAffinity }}
+      affinity:
+        nodeAffinity:
+          {{- toYaml . | nindent 10 }}
+      {{- end }}
       containers:
         - name: extract-worker
           image: {{ .Values.backend.image }}

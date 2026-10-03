@@ -303,6 +303,10 @@ tasks:
       requests:
         cpu: 1000m
         memory: 2Gi
+    # Node affinity for the processing-worker pods, rendered verbatim as the
+    # pod's spec.affinity.nodeAffinity. Same shape as database.affinity's
+    # nodeAffinity example.
+    nodeAffinity: {}
     # Backlog-driven autoscaling via KEDA. Requires the KEDA operator (keda.sh
     # CRDs) in the cluster. When enabled the ScaledObject owns the replica
     # count and replicaCount above is ignored.
