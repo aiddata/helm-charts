@@ -15,14 +15,6 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow AMQP connections from frontend
-    - from:
-        - podSelector:
-            matchLabels:
-              app: geoquery-frontend
-      ports:
-        - protocol: TCP
-          port: 5672
     # Allow AMQP connections from background workers
     - from:
         - podSelector:
