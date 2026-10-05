@@ -72,8 +72,8 @@ data:
     # pattern, which would miss extract_tasks_default.
     #
     # extract_tasks rows_inserted is task creation (builder plus request
-    # materialization); rows_updated is roughly three per processed task
-    # (claim 0->3, start 3->2, finish 2->1) plus sweep resets;
+    # materialization); rows_updated is roughly two per processed task
+    # (claim 0->2, finish 2->1) plus sweep resets;
     # rows_hot_updated / rows_updated is the HOT ratio from database.md
     # section 3. extract_data rows_inserted is processing's result writes.
     geoquery_partitioned_tables:
@@ -167,11 +167,20 @@ data:
       primary: true
       target_databases: ["app"]
       query: |
-        SELECT COALESCE(status::text, 'null') AS status
-          , count(*) AS requests
-          , COALESCE(EXTRACT(EPOCH FROM (now() - min(submit_time))), 0) AS oldest_age_seconds
-        FROM public.requests
-        GROUP BY 1
+        WITH counts AS (
+          SELECT COALESCE(status::text, 'null') AS status
+            , count(*) AS requests
+            , COALESCE(EXTRACT(EPOCH FROM (now() - min(submit_time))), 0) AS oldest_age_seconds
+          FROM public.requests
+          GROUP BY 1
+        ), states AS (
+          SELECT status FROM counts
+          UNION SELECT unnest(ARRAY['4', '3', '-1', '0', '2', '1', '-2'])
+        )
+        SELECT states.status
+          , COALESCE(counts.requests, 0) AS requests
+          , COALESCE(counts.oldest_age_seconds, 0) AS oldest_age_seconds
+        FROM states LEFT JOIN counts USING (status)
       metrics:
         - status:
             usage: "LABEL"

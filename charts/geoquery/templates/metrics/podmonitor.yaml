@@ -52,6 +52,31 @@ spec:
       path: {{ .Values.metrics.path }}
       interval: {{ .Values.metrics.podMonitor.interval }}
       scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: geoquery-background-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: geoquery-background-worker
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: geoquery-background-worker
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    # The Celery parent serves background job and request metrics, summed
+    # across its child processes, on the "metrics" port (9091).
+    - port: metrics
+      path: {{ .Values.metrics.path }}
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.podMonitor.scrapeTimeout }}
 {{- end }}
 {{- end }}
 {{- end }}

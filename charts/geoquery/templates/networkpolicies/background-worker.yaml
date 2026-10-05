@@ -14,8 +14,18 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-  ingress: []
-    # Background workers receive no inbound traffic - they pull from queues
+  # Only Prometheus can reach the background worker's metrics listener.
+  ingress:
+    {{- if .Values.metrics.enabled }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.metrics.networkPolicy.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.metrics.networkPolicy.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: 9091
+    {{- end }}
   egress:
     # Allow DNS resolution
     - to:

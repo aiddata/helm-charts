@@ -42,9 +42,21 @@ spec:
             - "background"
             - "--concurrency={{ .Values.tasks.background.concurrency }}"
             - "--max-tasks-per-child=100"
+          {{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: 9091
+              protocol: TCP
+          {{- end }}
           resources:
             {{- toYaml .Values.tasks.background.resources | nindent 12 }}
           env:
+            {{- if .Values.metrics.enabled }}
+            - name: BACKGROUND_METRICS_PORT
+              value: "9091"
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: /tmp/prometheus-background
+            {{- end }}
             - name: N_EXTRACT_TASK_BUILDERS
               value: "{{ .Values.tasks.background.extractTaskBuilders }}"
             - name: EXTRACT_TASK_BUILD_BATCH_SIZE

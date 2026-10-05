@@ -3,7 +3,7 @@ frontend:
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:f7b5277
+  image: ghcr.io/aiddata/geoquery-backend:42a1cbe
   replicaCount: 1
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
@@ -723,6 +723,8 @@ metrics:
   #     the django-prometheus endpoint on the dedicated metrics port (9091)
   #   - a PodMonitor is created for the processing workers so Prometheus
   #     scrapes the extract task metrics (geoquery_extract_*), also on 9091
+  #   - a PodMonitor is created for background workers (9091), exporting
+  #     background job progress and request completion metrics
   #   - a PodMonitor is created for the database instances so Prometheus can
   #     scrape the PostgreSQL metrics endpoint (port 9187), labelled with
   #     role=primary|replica. metrics.enabled also adds the custom queries in
