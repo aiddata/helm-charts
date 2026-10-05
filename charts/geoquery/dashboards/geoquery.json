@@ -657,7 +657,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "The bulk geometry read is the only thing routed to the standby, so this tracks tile volume almost exactly. Divergence from Tile Requests/sec means something else started reading the replica.",
+      "description": "All database queries issued by backend processes through the replica alias. Includes boundary tiles, dataset catalog and coverage reads, boundary autocomplete, and public API reads. Compare with tile volume for context; ordinary browsing also contributes to this series. Worker and MCP queries are not included.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1730,7 +1730,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "alias=default is the primary, alias=replica the standby. ReadReplicaRouter sends the tile geometry read to the standby while visibility resolution stays on the primary, so both move with tile traffic.",
+      "description": "Database queries issued by backend processes only: alias=default uses the primary and alias=replica uses the standby. Views explicitly select the replica for tile geometry and catalog reads; tile visibility resolution stays on the primary. Worker and MCP database activity is not included.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3180,7 +3180,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Tasks handed to a worker but not yet acknowledged, i.e. running. Celery acks late, so this tracks concurrency in use. It is capped by worker replicas x concurrency; sitting at that ceiling while Ready climbs is the signal to scale workers out.",
+          "description": "Messages delivered to a consumer but not yet acknowledged. The background worker uses early acknowledgements, so executing tasks have already been acknowledged while prefetched, reserved tasks remain here. This measures outstanding deliveries, not running tasks or concurrency in use; a busy worker can show zero.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3267,7 +3267,7 @@
               "refId": "A"
             }
           ],
-          "title": "Celery Tasks In Flight (Unacked)",
+          "title": "Celery Messages Delivered but Unacknowledged",
           "type": "timeseries"
         },
         {
@@ -3275,7 +3275,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Worker processes subscribed to each queue. Dropping to zero means nothing is serving that queue, which looks identical to an idle system on the depth panels until work arrives and stays.",
+          "description": "Broker consumers subscribed to each queue. A prefork Celery worker subscribes through its parent process, so this does not count execution slots or scale with its child-process concurrency. Dropping to zero means nothing is subscribed to serve that queue.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3384,7 +3384,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Extract tasks finished per second across the processing workers. completed and failed are the task's own result; unavailable means the row was no longer claimable when the worker reached it; error is an exception before the row was locked.",
+          "description": "Extract task outcomes per second across processing workers. Completed and failed outcomes are counted after the persistence transaction commits. Unavailable means the claimed row was no longer running or its dataset, processing option or boundary was deactivated; error means an exception before the row was loaded.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3574,7 +3574,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Average wall time one task spends in each phase; the stack's height is the mean task duration. lock = select and mark the row running; load = resource, geometry and category map lookups; extract = processor calls (raster I/O and compute); write = build and store extract_data rows; finalize = the terminal status update.",
+          "description": "Mean active wall time per finished task, split by phase; time waiting in the result buffer is excluded. lock = read the already-claimed row; load = resource, geometry and category-map lookups; extract = raster I/O and compute; write = build result rows plus an equal share of the batch DELETE and COPY; finalize = an equal share of the claim recheck, status update and commit, including deferred foreign-key checks. Flush retries are included. Before 2026-10-03, write included the recheck and used a multi-row INSERT, so it is not comparable across that change.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4345,6 +4345,103 @@
           ],
           "title": "Chunk Duration",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 16,
+            "x": 8,
+            "y": 91
+          },
+          "id": 71,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (pod) (increase(geoquery_extract_worker_pool_breaks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[1h]))",
+              "legendFormat": "{{pod}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Worker Process Deaths in the Trailing Hour",
+          "type": "timeseries",
+          "description": "Abrupt extract-worker child-process deaths (such as OOM kills or segfaults) detected by the parent, per pod, over the trailing hour. The parent replaces the process; unresolved tasks wait for the stale-task reaper. This counter does not cover loss of the entire pod. increase() handles counter resets and can produce fractional estimates."
         }
       ],
       "title": "Extract Tasks",
@@ -4858,7 +4955,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Rows written per second, summed over partitions. tasks created is the builder plus request materialization; task updates are about three per processed task (claim, start, finish); extract_data rows are processing's results.",
+          "description": "Rows written per second, summed over partitions. Tasks created is the builder plus request materialization; normal successful processing makes two task updates (claim 0->2, finish 2->1), plus any sweep resets. extract_data rows are processing results. The former Celery extraction flow made three updates per task.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4976,7 +5073,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Row updates on extract_tasks per completed task. A processed task is updated three times (0->3 claim, 3->2 start, 2->1 finish), so this should sit near 3. Above that, sweeps are resetting stranded or errored tasks, which then run again.",
+          "description": "Row updates on extract_tasks per completed task. Normal successful processing makes two updates (0->2 claim, 2->1 finish), so the steady-state baseline is about 2. Failures, sweep resets and retries can raise the ratio; chunk timing can cause short-lived variation. The former Celery extraction flow used 0->3->2->1 and had a baseline near 3.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -5542,7 +5639,7 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "topk(15, sum by (query) (rate(cnpg_geoquery_statements_exec_seconds{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)))",
+              "expr": "topk(15, sum by (queryid, datname, query) (rate(cnpg_geoquery_statements_exec_seconds{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)))",
               "legendFormat": "__auto",
               "range": false,
               "refId": "A",
@@ -5556,7 +5653,7 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum by (query) (rate(cnpg_geoquery_statements_calls{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)) and on(query) topk(15, sum by (query) (rate(cnpg_geoquery_statements_exec_seconds{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)))",
+              "expr": "sum by (queryid, datname, query) (rate(cnpg_geoquery_statements_calls{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)) and on(queryid, datname, query) topk(15, sum by (queryid, datname, query) (rate(cnpg_geoquery_statements_exec_seconds{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)))",
               "legendFormat": "__auto",
               "range": false,
               "refId": "B",
@@ -5570,7 +5667,7 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "(topk(15, sum by (query) (rate(cnpg_geoquery_statements_exec_seconds{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)))) / (sum by (query) (rate(cnpg_geoquery_statements_calls{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0))) * 1000",
+              "expr": "(topk(15, sum by (queryid, datname, query) (rate(cnpg_geoquery_statements_exec_seconds{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0)))) / (sum by (queryid, datname, query) (rate(cnpg_geoquery_statements_calls{namespace=~\"$namespace\"}[$__range]) and on(namespace, pod) (cnpg_pg_replication_in_recovery{namespace=~\"$namespace\"} == 0))) * 1000",
               "legendFormat": "__auto",
               "range": false,
               "refId": "C",
@@ -5594,21 +5691,25 @@
                 "includeByName": {},
                 "indexByName": {
                   "query": 0,
-                  "Value #A": 1,
-                  "Value #B": 2,
-                  "Value #C": 3
+                  "queryid": 1,
+                  "datname": 2,
+                  "Value #A": 3,
+                  "Value #B": 4,
+                  "Value #C": 5
                 },
                 "renameByName": {
                   "query": "Statement",
                   "Value #A": "Load",
                   "Value #B": "Calls/s",
-                  "Value #C": "Mean ms"
+                  "Value #C": "Mean ms",
+                  "queryid": "Query ID",
+                  "datname": "Database"
                 }
               }
             }
           ],
           "type": "table",
-          "description": "The statements with the most cumulative execution time on the primary over the selected range, from pg_stat_statements. Load is execution seconds per second: the average number of backends busy running that statement. Only each instance's current top 20 is exported, so a statement new to the list shows less than its full range."
+          "description": "The statements with the most cumulative execution time on the primary over the selected range, from pg_stat_statements. Load is execution seconds per second: the average number of backends busy running that statement. Only each instance's current top 20 is exported, so a statement new to the list shows less than its full range. Rows retain query ID and database identity because the displayed SQL text is truncated to 160 characters and distinct statements can share that prefix."
         }
       ],
       "title": "Database Write Path",
@@ -5629,7 +5730,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Extract tasks created (the builder plus request materialization) against tasks completed by processing. Completed persistently above created means processing is waiting on the builder; the reverse means the backlog is growing.",
+          "description": "Extract tasks created by the builder and request materialization compared with completed tasks. Completions above creation indicate depletion of existing work; creation above completions indicates accumulation, assuming other state changes are negligible. Workers can remain fully occupied while draining a large backlog. Builder starvation requires additional evidence of low pending work and elevated slot idle time.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -6044,6 +6145,227 @@
         }
       ],
       "title": "Extract Task State",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      },
+      "id": 72,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "decimals": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 70
+          },
+          "id": 73,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "min by (job, pod) (up{namespace=~\"$namespace\", job=~\".*/geoquery-(backend|processing-worker|db|db-pooler|rabbitmq|rabbitmq-detailed)\"})",
+              "legendFormat": "{{job}} / {{pod}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Exporter Scrape Health",
+          "type": "timeseries",
+          "description": "Prometheus scrape success for each GeoQuery target: 1 = successful, 0 = failed. A target that is no longer discovered disappears rather than reporting zero. A successful scrape does not guarantee that every database monitoring query succeeded; check collection errors alongside this panel."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "decimals": 0,
+              "max": 1
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 70
+          },
+          "id": 74,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (pod) (cnpg_collector_last_collection_error{namespace=~\"$namespace\"})",
+              "legendFormat": "PostgreSQL / {{pod}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (pooler, pod) (cnpg_pgbouncer_last_collection_error{namespace=~\"$namespace\"})",
+              "legendFormat": "PgBouncer {{pooler}} / {{pod}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Database Exporter Collection Errors",
+          "type": "timeseries",
+          "description": "Whether the latest database or PgBouncer collection reported an error: 0 = successful, 1 = error, taking the worst reported value per pod. Database monitoring queries can fail while the metrics endpoint remains scrapeable. Missing series remain gaps; they are not treated as successful collections."
+        }
+      ],
+      "title": "Metrics Health",
       "type": "row"
     }
   ],
