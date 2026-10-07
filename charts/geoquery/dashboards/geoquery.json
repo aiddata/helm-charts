@@ -1608,6 +1608,204 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "description": "Status 1: all extract_tasks rows minus the pending, in-flight and errored partial-index estimates. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count. Every row ever created that is not in another state, so it only grows except when tasks are reset or deleted.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 35
+          },
+          "id": 131,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "clamp_min(sum(cnpg_geoquery_partitioned_tables_estimated_rows{namespace=~\"$namespace\", relation=\"extract_tasks\"}) - sum(cnpg_geoquery_extract_task_states_estimated_rows{namespace=~\"$namespace\"}), 0)",
+              "legendFormat": "Completed tasks (estimated)",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Completed tasks (estimated)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Status 0, from extract_tasks_pending_idx. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 35
+          },
+          "id": 132,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(cnpg_geoquery_extract_task_states_estimated_rows{namespace=~\"$namespace\", index=\"extract_tasks_pending_idx\"})",
+              "legendFormat": "Pending tasks (estimated)",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Pending tasks (estimated)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Status 2 (claimed) and the legacy 3, from extract_tasks_stale_claims_idx. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 35
+          },
+          "id": 133,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(cnpg_geoquery_extract_task_states_estimated_rows{namespace=~\"$namespace\", index=\"extract_tasks_stale_claims_idx\"})",
+              "legendFormat": "In-flight tasks (estimated)",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "In-flight tasks (estimated)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "description": "Extract tasks created by the builder and request materialization compared with completed tasks. Completions above creation indicate depletion of existing work; creation above completions indicates accumulation, assuming other state changes are negligible. Workers can remain fully occupied while draining a large backlog. Builder starvation requires additional evidence of low pending work and elevated slot idle time.",
           "fieldConfig": {
             "defaults": {
@@ -1667,7 +1865,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 35
+            "y": 39
           },
           "id": 66,
           "options": {
@@ -1775,7 +1973,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 35
+            "y": 39
           },
           "id": 67,
           "options": {
@@ -1883,7 +2081,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 43
+            "y": 47
           },
           "id": 89,
           "options": {
@@ -2044,7 +2242,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 43
+            "y": 47
           },
           "id": 40,
           "options": {
@@ -2149,7 +2347,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 51
+            "y": 55
           },
           "id": 87,
           "options": {
@@ -2258,7 +2456,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 51
+            "y": 55
           },
           "id": 86,
           "options": {
@@ -2379,7 +2577,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 59
+            "y": 63
           },
           "id": 70,
           "options": {
@@ -2498,7 +2696,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 59
+            "y": 63
           },
           "id": 71,
           "options": {
@@ -2596,7 +2794,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 67
+            "y": 71
           },
           "id": 88,
           "options": {

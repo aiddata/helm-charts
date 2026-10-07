@@ -76,6 +76,13 @@ data:
     # (claim 0->2, finish 2->1) plus sweep resets;
     # rows_hot_updated / rows_updated is the HOT ratio from database.md
     # section 3. extract_data rows_inserted is processing's result writes.
+    #
+    # estimated_rows is pg_class.reltuples, the same vacuum-lagged figure
+    # geoquery_extract_task_states reads off the status partial indexes, and
+    # refreshed by the same vacuums and analyzes. extract_tasks has no index
+    # on completed tasks (status 1), so the dashboard estimates them as this
+    # minus the three partial-index estimates. live_rows (n_live_tup) is
+    # fresher but would not line up with those.
     geoquery_partitioned_tables:
       primary: true
       target_databases: ["app"]
@@ -88,11 +95,13 @@ data:
           , sum(s.n_tup_del) AS rows_deleted
           , sum(s.n_live_tup) AS live_rows
           , sum(s.n_dead_tup) AS dead_rows
+          , sum(GREATEST(c.reltuples, 0)) AS estimated_rows
           , sum(pg_catalog.pg_table_size(s.relid)) AS table_bytes
           , sum(pg_catalog.pg_indexes_size(s.relid)) AS index_bytes
         FROM pg_catalog.pg_inherits h
         JOIN pg_catalog.pg_class p ON p.oid = h.inhparent
         JOIN pg_catalog.pg_stat_user_tables s ON s.relid = h.inhrelid
+        JOIN pg_catalog.pg_class c ON c.oid = h.inhrelid
         WHERE p.relname IN ('extract_tasks', 'extract_data')
           AND p.relkind = 'p'
         GROUP BY p.relname
@@ -121,6 +130,9 @@ data:
         - dead_rows:
             usage: "GAUGE"
             description: "Estimated dead rows awaiting vacuum, summed over partitions"
+        - estimated_rows:
+            usage: "GAUGE"
+            description: "Rows per pg_class.reltuples as of each partition's last vacuum or analyze, summed over partitions"
         - table_bytes:
             usage: "GAUGE"
             description: "Heap and TOAST size, summed over partitions"
