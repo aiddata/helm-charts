@@ -73,8 +73,11 @@ spec:
     scalingModifiers:
       metricType: AverageValue
       target: "1"
+      # occupied and claim are empty until every pod reports, e.g. throughout
+      # a rollout. KEDA's activity loop still runs the formula with the failed
+      # triggers absent (nil), so hold at current rather than erroring.
       formula: >-
-        draining > 0 ? current : min(
+        draining > 0 || occupied == nil || claim == nil ? current : min(
           pending >= {{ $claim.pendingTasksForMaxReplicas }} ? {{ $autoscaling.maxReplicas }} : max({{ $autoscaling.minReplicas }}, occupied),
           claim > {{ $claim.scaleDownAbove }} ? max({{ $autoscaling.minReplicas }}, current - 1)
             : claim < {{ $claim.scaleUpBelow }} ? {{ $autoscaling.maxReplicas }} : current
