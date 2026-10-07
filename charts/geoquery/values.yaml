@@ -401,6 +401,9 @@ django:
 
 geoquery:
   directories: "false"
+  # Seconds between rebuilds of the /stats page snapshot
+  # (STATS_REPORT_INTERVAL_SECONDS). 0 disables the report
+  statsReportIntervalSeconds: 3600
   # Secret-backed settings, in the same {secretName, key} form as
   # django.secretKey above.
   emailPassword:

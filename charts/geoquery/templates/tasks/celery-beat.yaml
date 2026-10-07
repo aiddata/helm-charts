@@ -40,6 +40,8 @@ spec:
           env:
             - name: EXTRACT_TASK_BUILD_INTERVAL_SECONDS
               value: {{ .Values.tasks.beat.extractTaskBuildIntervalSeconds | quote }}
+            - name: STATS_REPORT_INTERVAL_SECONDS
+              value: {{ .Values.geoquery.statsReportIntervalSeconds | quote }}
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
