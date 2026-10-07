@@ -1,5 +1,23 @@
 {{- if .Values.tasks.processing.autoscaling.enabled }}
 {{- $autoscaling := .Values.tasks.processing.autoscaling }}
+{{- $claim := $autoscaling.claimContention }}
+{{- if $claim.enabled }}
+{{- if not (and .Values.metrics.enabled .Values.metrics.podMonitor.enabled) }}
+{{- fail "claimContention requires metrics.enabled and metrics.podMonitor.enabled" }}
+{{- end }}
+{{- if not $claim.prometheusAddress }}
+{{- fail "claimContention.prometheusAddress must be set" }}
+{{- end }}
+{{- if or (lt (int $autoscaling.minReplicas) 1) (lt (int .Values.tasks.processing.concurrency) 1) (lt (int $claim.pendingTasksForMaxReplicas) 1) }}
+{{- fail "claimContention requires positive minReplicas, concurrency and pendingTasksForMaxReplicas" }}
+{{- end }}
+{{- if or (lt (float64 $claim.scaleUpBelow) 0.0) (le (float64 $claim.scaleDownAbove) (float64 $claim.scaleUpBelow)) (gt (float64 $claim.scaleDownAbove) 1.0) }}
+{{- fail "claimContention thresholds must satisfy 0 <= scaleUpBelow < scaleDownAbove <= 1" }}
+{{- end }}
+{{- if semverCompare "<1.34-0" .Capabilities.KubeVersion.Version }}
+{{- fail "claimContention requires Kubernetes 1.34+ with HPAConfigurableTolerance enabled" }}
+{{- end }}
+{{- end }}
 apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication
 metadata:
@@ -28,6 +46,12 @@ spec:
   # reads the cache on its own sync cycle, so the database sees exactly one
   # query per interval regardless of how often the HPA syncs.
   pollingInterval: {{ $autoscaling.pollingInterval }}
+  {{- if $claim.enabled }}
+  fallback:
+    failureThreshold: 3
+    replicas: {{ $autoscaling.minReplicas }}
+    behavior: currentReplicas
+  {{- end }}
   {{- if eq (int $autoscaling.minReplicas) 0 }}
   # Only consulted on the scale-to-zero path; KEDA warns it is inert otherwise.
   cooldownPeriod: {{ $autoscaling.cooldownPeriod }}
@@ -39,8 +63,35 @@ spec:
     # while autoscaling is on, is the API default of 1, not replicaCount.
     # The next Helm upgrade with autoscaling off puts replicaCount back.
     restoreToOriginalReplicaCount: false
+    {{- if $claim.enabled }}
+    scalingModifiers:
+      metricType: AverageValue
+      target: "1"
+      formula: >-
+        draining > 0 ? current : min(
+          pending >= {{ $claim.pendingTasksForMaxReplicas }} ? {{ $autoscaling.maxReplicas }} : max({{ $autoscaling.minReplicas }}, occupied),
+          claim > {{ $claim.scaleDownAbove }} ? max({{ $autoscaling.minReplicas }}, current - 1)
+            : claim < {{ $claim.scaleUpBelow }} ? {{ $autoscaling.maxReplicas }} : current
+        )
+    {{- end }}
     horizontalPodAutoscalerConfig:
       behavior:
+        {{- if $claim.enabled }}
+        scaleUp:
+          stabilizationWindowSeconds: {{ $claim.scaleUpStabilizationSeconds }}
+          tolerance: "0"
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: {{ $claim.changePeriodSeconds }}
+        scaleDown:
+          stabilizationWindowSeconds: {{ $claim.scaleDownStabilizationSeconds }}
+          tolerance: "0"
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: {{ $claim.changePeriodSeconds }}
+        {{- else }}
         # Backlog is the reason to add workers, so add them promptly.
         scaleUp:
           stabilizationWindowSeconds: 0
@@ -58,8 +109,10 @@ spec:
             - type: Pods
               value: 1
               periodSeconds: {{ $autoscaling.scaleDown.periodSeconds }}
+        {{- end }}
   triggers:
     - type: postgresql
+      name: pending
       useCachedMetrics: true
       authenticationRef:
         name: processing-worker-postgres
@@ -76,7 +129,24 @@ spec:
         # stops at maxReplicas * pendingTasksPerReplica: past that the HPA is
         # already pinned at maxReplicas, so counting further only makes the
         # index scan longer on a large backlog.
+        {{- if $claim.enabled }}
+        query: "SELECT count(*) FROM (SELECT 1 FROM extract_tasks WHERE status = 0 LIMIT {{ $claim.pendingTasksForMaxReplicas }}) s"
+        {{- else }}
         query: "SELECT count(*) FROM (SELECT 1 FROM extract_tasks WHERE status = 0 LIMIT {{ mul (int $autoscaling.maxReplicas) (int $autoscaling.pendingTasksPerReplica) }}) s"
+        {{- end }}
         # Target average per replica: the HPA sizes to ceil(count / value).
         targetQueryValue: {{ $autoscaling.pendingTasksPerReplica | quote }}
+    {{- if $claim.enabled }}
+    {{- range $name := list "current" "draining" "occupied" "claim" }}
+    - type: prometheus
+      name: {{ $name }}
+      useCachedMetrics: true
+      metadata:
+        serverAddress: {{ $claim.prometheusAddress | quote }}
+        threshold: "1"
+        ignoreNullValues: "false"
+        query: |
+          {{- include (printf "geoquery.processingAutoscaling.%s" $name) $ | nindent 10 }}
+    {{- end }}
+    {{- end }}
 {{- end }}
