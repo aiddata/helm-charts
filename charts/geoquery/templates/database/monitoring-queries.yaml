@@ -66,6 +66,42 @@ data:
             usage: "GAUGE"
             description: "Client backends in this state and wait event"
 
+    # Open transactions by the workload that holds them. CNPG's
+    # cnpg_backends_max_tx_duration_seconds says a long transaction exists but
+    # not whose it is The workload is the
+    # /* gq:<workload> */ tag analytics/query_tags.py prepends to each
+    # statement, read from the backend's current or most recent statement,
+    # not necessarily the one that opened the transaction. Statements that
+    # bypass Django's execute (cursor.copy, raw psql) are untagged.
+    geoquery_transactions:
+      query: |
+        SELECT COALESCE(datname, '') AS datname
+          , COALESCE(
+              CASE WHEN backend_type = 'autovacuum worker' THEN 'autovacuum' END,
+              substring(query FROM '^/\* gq:([a-z0-9_.:-]+) \*/'),
+              'untagged'
+            ) AS workload
+          , count(*) AS open
+          , max(EXTRACT(EPOCH FROM clock_timestamp() - xact_start))::float8 AS oldest_seconds
+        FROM pg_catalog.pg_stat_activity
+        WHERE backend_type IN ('client backend', 'autovacuum worker')
+          AND xact_start IS NOT NULL
+          AND pid <> pg_catalog.pg_backend_pid()
+        GROUP BY 1, 2
+      metrics:
+        - datname:
+            usage: "LABEL"
+            description: "Database"
+        - workload:
+            usage: "LABEL"
+            description: "gq: query tag, autovacuum, or untagged"
+        - open:
+            usage: "GAUGE"
+            description: "Open transactions held by this workload"
+        - oldest_seconds:
+            usage: "GAUGE"
+            description: "Age of this workload's oldest open transaction"
+
     # Row and size counters for the two partitioned tables, summed over their
     # partitions. pg_stat_user_tables only has rows for the leaf partitions,
     # never the parent. Partitions come from pg_inherits rather than a name
