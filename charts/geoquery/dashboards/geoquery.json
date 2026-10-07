@@ -334,7 +334,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (\n  (sum(rate(django_http_responses_total_by_status_total{namespace=~\"$namespace\", status=~\"5..\"}[$__rate_interval])) or vector(0))\n  /\n  sum(rate(django_http_responses_total_by_status_total{namespace=~\"$namespace\"}[$__rate_interval]))\n)",
+          "expr": "(\n  100 * (\n    (sum(rate(django_http_responses_total_by_status_total{namespace=~\"$namespace\", status=~\"5..\"}[$__rate_interval])) or vector(0))\n    /\n    sum(rate(django_http_responses_total_by_status_total{namespace=~\"$namespace\"}[$__rate_interval]))\n  ) >= 0\n) or vector(0)",
           "legendFormat": "HTTP server errors",
           "range": false,
           "refId": "A",
