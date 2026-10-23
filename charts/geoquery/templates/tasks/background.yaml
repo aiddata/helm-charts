@@ -57,12 +57,8 @@ spec:
             - name: PROMETHEUS_MULTIPROC_DIR
               value: /tmp/prometheus-background
             {{- end }}
-            - name: N_EXTRACT_TASK_BUILDERS
-              value: "{{ .Values.tasks.background.extractTaskBuilders }}"
-            - name: EXTRACT_TASK_BUILD_BATCH_SIZE
-              value: {{ .Values.tasks.background.extractTaskBuildBatchSize | quote }}
-            - name: EXTRACT_TASK_BUILD_MAX_TASKS
-              value: {{ .Values.tasks.background.extractTaskBuildMaxTasks | quote }}
+            - name: EXTRACT_SYNC_CHUNKS_PER_RUN
+              value: {{ .Values.tasks.background.extractSyncChunksPerRun | quote }}
             - name: STATS_REPORT_INTERVAL_SECONDS
               value: {{ .Values.geoquery.statsReportIntervalSeconds | quote }}
             - name: DJANGO_TIME_ZONE

@@ -37,12 +37,18 @@ kind: ScaledObject
 metadata:
   name: processing-worker
   namespace: {{ .Release.Namespace }}
+  {{- if .Values.tasks.processing.paused }}
+  annotations:
+    # KEDA scales the Deployment to this count and stops evaluating triggers
+    # until the annotation is removed.
+    autoscaling.keda.sh/paused-replicas: "0"
+  {{- end }}
 spec:
   scaleTargetRef:
     name: processing-worker
   minReplicaCount: {{ $autoscaling.minReplicas }}
   maxReplicaCount: {{ $autoscaling.maxReplicas }}
-  # Cadence of the count query. The trigger caches the result and the HPA
+  # Cadence of the demand query. The trigger caches the result and the HPA
   # reads the cache on its own sync cycle, so the database sees exactly one
   # query per interval regardless of how often the HPA syncs.
   pollingInterval: {{ $autoscaling.pollingInterval }}
@@ -99,10 +105,10 @@ spec:
             - type: Pods
               value: {{ $autoscaling.scaleUp.podsPerPeriod }}
               periodSeconds: {{ $autoscaling.scaleUp.periodSeconds }}
-        # Removing a worker waits on up to `concurrency` in-flight tasks and
-        # hands the rest of their chunks back to the queue, so shed capacity
-        # slowly and only after the backlog has stayed low for a while. One
-        # pod at a time keeps the drain cost bounded.
+        # Removing a worker waits on up to `concurrency` in-flight tasks or
+        # lease pages (up to drainSeconds) and hands the rest back, so shed
+        # capacity slowly and only after the backlog has stayed low for a
+        # while. One pod at a time keeps the drain cost bounded.
         scaleDown:
           stabilizationWindowSeconds: {{ $autoscaling.scaleDown.stabilizationWindowSeconds }}
           policies:
@@ -122,19 +128,16 @@ spec:
         userName: {{ $autoscaling.postgres.userName | quote }}
         dbName: {{ $autoscaling.postgres.dbName | quote }}
         sslmode: {{ $autoscaling.postgres.sslmode | quote }}
-        # Pending extract tasks, served by the partial index from analytics
-        # migration 0014. Rows already claimed (status 2) are being worked on
-        # and number at most one chunk per worker process, so they are
-        # deliberately left out. The count
-        # stops at maxReplicas * pendingTasksPerReplica: past that the HPA is
-        # already pinned at maxReplicas, so counting further only makes the
-        # index scan longer on a large backlog.
-        {{- if $claim.enabled }}
-        query: "SELECT count(*) FROM (SELECT 1 FROM extract_tasks WHERE status = 0 LIMIT {{ $claim.pendingTasksForMaxReplicas }}) s"
-        {{- else }}
-        query: "SELECT count(*) FROM (SELECT 1 FROM extract_tasks WHERE status = 0 LIMIT {{ mul (int $autoscaling.maxReplicas) (int $autoscaling.pendingTasksPerReplica) }}) s"
-        {{- end }}
-        # Target average per replica: the HPA sizes to ceil(count / value).
+        # Outstanding work from analytics migration 0031: runnable pending
+        # tasks, features in outstanding leases, unscanned pair ranges and
+        # uncovered ranges, for available datasets only. Background work has
+        # no task rows until it finishes, so a count of pending rows would
+        # see almost none of it. Work only a sync or bootstrap can unblock is
+        # left out, since adding workers would not help; the background
+        # workers recover it. The trigger stays named "pending" because the
+        # claimContention formula refers to it.
+        query: "SELECT extract_work_demand()"
+        # Target average per replica: the HPA sizes to ceil(demand / value).
         targetQueryValue: {{ $autoscaling.pendingTasksPerReplica | quote }}
     {{- if $claim.enabled }}
     {{- range $name := list "current" "draining" "occupied" "claim" }}

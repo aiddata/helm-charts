@@ -107,9 +107,10 @@ data:
     # never the parent. Partitions come from pg_inherits rather than a name
     # pattern, which would miss extract_tasks_default.
     #
-    # extract_tasks rows_inserted is task creation (builder plus request
-    # materialization); rows_updated is roughly two per processed task
-    # (claim 0->2, finish 2->1) plus sweep resets;
+    # extract_tasks rows_inserted is request materialization plus finished
+    # lease pages, whose task rows are inserted already complete;
+    # rows_updated is roughly two per claimed task (claim 0->2, finish 2->1)
+    # plus sweep and sync resets;
     # rows_hot_updated / rows_updated is the HOT ratio from database.md
     # section 3. extract_data rows_inserted is processing's result writes.
     #

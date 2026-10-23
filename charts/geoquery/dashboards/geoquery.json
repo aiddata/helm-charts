@@ -186,16 +186,16 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=\"completed\"}[$__rate_interval]))",
-          "legendFormat": "Extract tasks completed / sec",
+          "expr": "((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval])) or vector(0)))",
+          "legendFormat": "Extractions completed / sec",
           "range": false,
           "refId": "A",
           "instant": true
         }
       ],
-      "title": "Extract tasks completed / sec",
+      "title": "Extractions completed / sec",
       "type": "stat",
-      "description": "Committed completions. Read alongside backlog, failures and active chunks; zero can mean an empty queue."
+      "description": "Committed completions: claimed task rows (requests and retries) plus features in committed lease pages (background work). Read alongside outstanding work, failures and active chunks; zero can mean there is nothing to do."
     },
     {
       "datasource": {
@@ -260,16 +260,16 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"failed|error\"}[$__rate_interval])) or (0 * sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed|error\"}[$__rate_interval])))) / (sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed|error\"}[$__rate_interval])) > 0)",
-          "legendFormat": "Extract task failures",
+          "expr": "100 * ((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"failed|error\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"failed\"}[$__rate_interval])) or vector(0))) / (((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed|error\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed\"}[$__rate_interval])) or vector(0))) > 0)",
+          "legendFormat": "Extraction failures",
           "range": false,
           "refId": "A",
           "instant": true
         }
       ],
-      "title": "Extract task failures",
+      "title": "Extraction failures",
       "type": "stat",
-      "description": "Failed + error outcomes divided by completed + failed + error. Unavailable claims are excluded. No outcomes or missing telemetry shows No data."
+      "description": "Failed and error outcomes as a percentage of attempted extractions, counting claimed task rows and features in committed lease pages together. No outcomes produces no value."
     },
     {
       "datasource": {
@@ -1674,7 +1674,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Status 0, from extract_tasks_pending_idx. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count.",
+          "description": "Status 0, from extract_tasks_pending_idx. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count. Task rows only -- request tasks and retries. Background work has no rows until a lease page finishes; see Outstanding extraction work for the full backlog.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1740,7 +1740,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Status 2 (claimed) and the legacy 3, from extract_tasks_stale_claims_idx. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count.",
+          "description": "Status 2 (claimed) and the legacy 3, from extract_tasks_stale_claims_idx. Vacuum-lagged estimate, from the same pg_class.reltuples figures as the Pending and In-Flight Tasks panel; not an exact count. Task rows only; lease pages in progress are in Outstanding Leases by State.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1806,7 +1806,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Extract tasks created by the builder and request materialization compared with completed tasks. Completions above creation indicate depletion of existing work; creation above completions indicates accumulation, assuming other state changes are negligible. Workers can remain fully occupied while draining a large backlog. Builder starvation requires additional evidence of low pending work and elevated slot idle time.",
+          "description": "extract_tasks rows inserted -- request materialization, plus finished lease pages, whose rows are inserted already complete -- compared with completed extractions (claimed task rows plus lease features). Because background work only gets rows when it finishes, the two lines track each other closely for it; creation well above completion is request tasks accumulating. The background backlog is Outstanding Extraction Work, not the gap between these lines.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1900,13 +1900,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", outcome=\"completed\"}[$__rate_interval])) * 3600",
+              "expr": "((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval])) or vector(0))) * 3600",
               "legendFormat": "completed",
               "range": true,
               "refId": "B"
             }
           ],
-          "title": "Tasks Created vs Completed per Hour",
+          "title": "Task Rows Created vs Extractions Completed per Hour",
           "type": "timeseries"
         },
         {
@@ -1914,7 +1914,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Vacuum-lagged partial-index estimates, on a logarithmic scale. Use the separate failed-task panel for small error counts. These are not exact counts or a reliable completion ETA.",
+          "description": "Vacuum-lagged partial-index estimates, on a logarithmic scale. Use the separate failed-task panel for small error counts. These are not exact counts or a reliable completion ETA. Task rows only -- request tasks and retries. Background work has no rows until a lease page finishes; see Outstanding Extraction Work for the full backlog.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2374,7 +2374,7 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "100 * (sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"failed|error\"}[$__rate_interval])) or (0 * sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed|error\"}[$__rate_interval])))) / (sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed|error\"}[$__rate_interval])) > 0)",
+              "expr": "100 * ((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"failed|error\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"failed\"}[$__rate_interval])) or vector(0))) / (((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed|error\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed|failed\"}[$__rate_interval])) or vector(0))) > 0)",
               "legendFormat": "Failed / attempted",
               "range": true,
               "refId": "A"
@@ -2382,7 +2382,7 @@
           ],
           "title": "Extract Failure Percentage",
           "type": "timeseries",
-          "description": "Failed and error outcomes divided by completed, failed and error outcomes. Unavailable is shown separately in the outcome chart. No outcomes produces a gap."
+          "description": "Failed and error outcomes divided by completed, failed and error outcomes, counting claimed task rows and features in committed lease pages together. Unavailable is shown separately in the outcome chart. No outcomes produces a gap."
         },
         {
           "datasource": {
@@ -2502,14 +2502,14 @@
           ],
           "title": "Oldest Active Chunk vs Reaper Deadline",
           "type": "timeseries",
-          "description": "Age of currently unfinished chunks, sampled live from worker slots. Cleared on completion or detected child death. A chunk can be reclaimed after the configured deadline; the reaper runs periodically. Dead pods are detected through scrape health and readiness."
+          "description": "Age of currently unfinished chunks, sampled live from worker slots. Cleared on completion or detected child death. A chunk can be reclaimed after the configured deadline; the reaper runs periodically. Dead pods are detected through scrape health and readiness. Lease pages count as chunks here too. They are not reaped: a page still running after EXTRACT_TASK_LEASE_SECONDS (30 minutes by default) may be taken over by another worker, and its first owner's result is discarded."
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Wall time from claiming a chunk of extract tasks to finishing or releasing all of it. The chunk's rows sit in status 2 that long, and free_stale_processing_tasks returns them to pending after STALE_TASK_MINUTES (30), after which they run twice. Yellow from 15 minutes, red from 25: lower the processing claimBatch before it gets there. max is the upper bound of the highest bucket that saw a chunk. Only finished/released chunks are observed; use Oldest Active Chunk for currently hung work. Histogram quantiles above the largest finite bucket cannot resolve the true duration.",
+          "description": "Wall time from claiming a chunk of extract tasks to finishing or releasing all of it. The chunk's rows sit in status 2 that long, and free_stale_processing_tasks returns them to pending after STALE_TASK_MINUTES (30), after which they run twice. Yellow from 15 minutes, red from 25: lower the processing claimBatch before it gets there. max is the upper bound of the highest bucket that saw a chunk. Only finished/released chunks are observed; use Oldest Active Chunk for currently hung work. Histogram quantiles above the largest finite bucket cannot resolve the true duration. Task chunks only; lease page timings are in Lease Phase Duration.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2861,7 +2861,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Worker slots, by what they are doing: running tasks, claiming the next chunk (claim lock wait and claim), or idle between chunks (including the wait after finding the queue empty). The stack should come to roughly the fleet's slot count (replicas \u00d7 concurrency); a shortfall is time none of these cover, such as releasing a chunk, closing connections, or worker processes being recycled. Configured slots is the live capacity reference, exported by each worker parent. Work is observed after completion, so short windows can lag current occupancy.",
+          "description": "Worker slots, by what they are doing: running claimed tasks, claiming the next chunk (claim lock wait and claim), computing lease pages (lease claim, load, compute and commit), computing coverage chunks, or idle between chunks (including the wait after finding nothing to do). The stack should come to roughly the fleet's slot count (replicas \u00d7 concurrency); a shortfall is time none of these cover, such as releasing a chunk, closing connections, or worker processes being recycled. Configured slots is the live capacity reference, exported by each worker parent. Work is observed after completion, so short windows can lag current occupancy, and a long lease page appears only when it ends.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3000,6 +3000,28 @@
               "legendFormat": "idle",
               "range": true,
               "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(geoquery_extract_lease_phase_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval]))",
+              "legendFormat": "lease pages",
+              "range": true,
+              "refId": "E"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(geoquery_extract_coverage_chunk_seconds_sum{namespace=~\"$namespace\"}[$__rate_interval]))",
+              "legendFormat": "coverage",
+              "range": true,
+              "refId": "F"
             },
             {
               "datasource": {
@@ -3558,7 +3580,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Datasets completing the most extract tasks per second. Picked per point, so more than ten can appear over a long range.",
+          "description": "Datasets completing the most extract tasks per second. Picked per point, so more than ten can appear over a long range. Claimed task rows only: lease metrics carry no dataset label.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3661,6 +3683,1620 @@
         "x": 0,
         "y": 36
       },
+      "id": 151,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 37
+          },
+          "id": 134,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_work_demand{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "Outstanding extraction work",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Outstanding extraction work",
+          "type": "stat",
+          "description": "extract_work_demand(), the autoscaler's signal: runnable pending tasks, features in outstanding leases, unscanned pair ranges and uncovered ranges, in feature-pair work items. Overestimates by design (feature id ranges include gaps). Refreshed by every sync run on the background workers, so it keeps reporting with the processing fleet at zero."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 37
+          },
+          "id": 135,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_leases{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\", state=\"outstanding\"})",
+              "legendFormat": "Outstanding lease pages",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Outstanding lease pages",
+          "type": "stat",
+          "description": "Lease pages assigned and not yet completed, including expired and parked ones. Refreshed by every sync run."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 37
+          },
+          "id": 136,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(max by (kind) (geoquery_extract_dirty_scopes{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"}))",
+              "legendFormat": "Dirty input scopes",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Dirty input scopes",
+          "type": "stat",
+          "description": "Datasets and collections with input changes sync has not published yet. Work covered by a pending reset is held back until it publishes."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 37
+          },
+          "id": 137,
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "last"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_bootstrap_pending_datasets{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "Datasets awaiting bootstrap",
+              "range": false,
+              "refId": "A",
+              "instant": true
+            }
+          ],
+          "title": "Datasets awaiting bootstrap",
+          "type": "stat",
+          "description": "Datasets initialize_extract_work has not finished. Nothing processes them, and they add nothing to outstanding work, so a non-zero value after a release means the bootstrap still has to be run."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 41
+          },
+          "id": 138,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_work_demand{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "extract_work_demand()",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Outstanding Extraction Work",
+          "type": "timeseries",
+          "description": "The autoscaler's demand over time, in feature-pair work items. It falls as cursors advance and coverage catches up, and jumps when sync rewinds a pair or a new dataset, resource or boundary appears. Compare with Processing Worker Replicas when calibrating pendingTasksPerReplica."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 41
+          },
+          "id": 139,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (outcome) (rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[$__rate_interval]))",
+              "legendFormat": "{{outcome}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Lease Features/sec by Outcome",
+          "type": "timeseries",
+          "description": "Features in committed lease pages: completed (status 1), failed (status -1), or conflict (a request's task for that feature already existed and was kept). This is background extraction throughput; claimed task rows are in Extract Tasks/sec by Outcome."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 49
+          },
+          "id": 140,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (outcome) (increase(geoquery_extract_lease_pages_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[1h]))",
+              "legendFormat": "{{outcome}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Lease Pages per Hour by Outcome",
+          "type": "timeseries",
+          "description": "Lease pages finished, by outcome. completed = tasks and results committed; deferred = inputs changed, page given back; parked = dataset or option inactive; stale = taken over by another worker; gone = already completed or cancelled; collision = resource-array hash collision; returned = given back by a stopping worker; timed_out = ran past the lease; failed = unexpected error; exhausted = a single feature recorded as a terminal failure. Steady timed_out or stale means pages are too large for leaseSeconds."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 49
+          },
+          "id": 141,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le, phase) (rate(geoquery_extract_lease_phase_seconds_bucket{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[$__rate_interval])))",
+              "legendFormat": "p95 {{phase}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(geoquery_extract_lease_phase_seconds_bucket{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", phase=\"compute\"}[$__rate_interval])))",
+              "legendFormat": "p99 compute",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Lease Phase Duration",
+          "type": "timeseries",
+          "description": "Wall time per lease page in each phase: claim (including takeovers and empty windows), load (option, resources, category map), compute (geometry blocks and processor calls) and commit (the fenced completion). Keep p99 compute well below leases.leaseSeconds before raising leases.pageSize. Observed when each page ends."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 57
+          },
+          "id": 142,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (state) (geoquery_extract_leases{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "{{state}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Outstanding Leases by State",
+          "type": "timeseries",
+          "description": "outstanding = every lease page not yet completed; expired = its owner's time ran out and it awaits takeover by the next claim; parked = its dataset or option is inactive. Expired pages that persist mean no worker is claiming."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 57
+          },
+          "id": 143,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_oldest_lease_seconds{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "oldest lease",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Oldest Lease Age",
+          "type": "timeseries",
+          "description": "Age of the oldest outstanding lease page, from its first assignment. Takeovers keep the original age, so a page that keeps failing or timing out grows here until it is split or exhausted."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 65
+          },
+          "id": 144,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(geoquery_extract_lease_takeovers_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[1h]))",
+              "legendFormat": "takeovers",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(geoquery_extract_lease_splits_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[1h]))",
+              "legendFormat": "splits",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (error_class) (increase(geoquery_extract_lease_errors_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[1h]))",
+              "legendFormat": "error: {{error_class}}",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Takeovers, Splits and Lease Errors per Hour",
+          "type": "timeseries",
+          "description": "Takeovers reassign expired leases. Splits halve a page after EXTRACT_TASK_LEASE_BISECT_ATTEMPT unsuccessful assignments. Errors are by class: database (the page is given back unpenalized and the slot backs off), hash_collision, or the exception type."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 65
+          },
+          "id": 145,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_lease_max_attempts{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "most assignments of one lease",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max(geoquery_extract_pair_errors{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "pairs held back by an error",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Lease Attempts and Pair Errors",
+          "type": "timeseries",
+          "description": "The highest assignment count among outstanding leases, and current pairs held back by an error with a retry backoff (extract_task_build_progress.last_error; manage.py extract_work_status lists them)."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 73
+          },
+          "id": 146,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (kind) (geoquery_extract_dirty_scopes{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "dirty {{kind}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (kind) (geoquery_extract_erroring_scopes{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "erroring {{kind}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Dirty and Erroring Input Scopes",
+          "type": "timeseries",
+          "description": "Input scopes (datasets and collections) with changes sync has not published, and the dirty ones whose last sync attempt failed (extract_input_state.last_error). A scope is worked off over several sync runs; erroring scopes back off and need attention."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 73
+          },
+          "id": 147,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (kind) (geoquery_extract_oldest_dirty_scope_seconds{namespace=~\"$namespace\", job=~\".*/geoquery-background-worker\"})",
+              "legendFormat": "{{kind}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Oldest Dirty Input Scope",
+          "type": "timeseries",
+          "description": "Time since the least recently touched dirty scope last changed or progressed. Rising steadily means sync is stuck on it, not merely busy."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 81
+          },
+          "id": 148,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(geoquery_extract_coverage_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[$__rate_interval]))",
+              "legendFormat": "feat_map rows examined/sec",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (outcome) (rate(geoquery_extract_coverage_chunks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[$__rate_interval]))",
+              "legendFormat": "chunks/sec: {{outcome}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Coverage Progress",
+          "type": "timeseries",
+          "description": "Coverage chunks computed by worker slots between pending tasks and lease pages. A non-global dataset's pairs can lease only features coverage has examined, so this gates them. busy = every candidate dataset locked, dirty or blocked."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 81
+          },
+          "id": 149,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(geoquery_extract_guard_seconds_bucket{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[$__rate_interval])))",
+              "legendFormat": "p95 {{stage}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Input Guard Wait and Hold",
+          "type": "timeseries",
+          "description": "Time worker slots spend taking share locks on the input states their work depends on (wait) and holding them through commit (hold). Long waits mean a sync or trigger holds those states exclusively."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "min": 0,
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 89
+          },
+          "id": 150,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "12.3.1",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (reason) (increase(geoquery_extract_replica_fallbacks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\"}[1h]))",
+              "legendFormat": "{{reason}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Replica Fallbacks per Hour",
+          "type": "timeseries",
+          "description": "Lease input reads that fell back to the primary: lag (WAL barrier timed out), conflict (standby query cancelled), error, missing_rows. Only populated with EXTRACT_TASK_LEASE_READ_REPLICA enabled."
+        }
+      ],
+      "title": "Background extraction: leases and sync",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
       "id": 122,
       "panels": [
         {
@@ -3727,7 +5363,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 37
+            "y": 38
           },
           "id": 90,
           "options": {
@@ -3861,7 +5497,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 37
+            "y": 38
           },
           "id": 96,
           "options": {
@@ -3962,7 +5598,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 46
           },
           "id": 91,
           "options": {
@@ -4063,7 +5699,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 46
           },
           "id": 92,
           "options": {
@@ -4164,7 +5800,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 53
+            "y": 54
           },
           "id": 93,
           "options": {
@@ -4273,7 +5909,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 53
+            "y": 54
           },
           "id": 94,
           "options": {
@@ -4374,7 +6010,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 61
+            "y": 62
           },
           "id": 95,
           "options": {
@@ -4421,7 +6057,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 38
       },
       "id": 123,
       "panels": [
@@ -4489,7 +6125,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 38
+            "y": 39
           },
           "id": 97,
           "options": {
@@ -4524,7 +6160,7 @@
           ],
           "title": "Time Since a Background Job Returned Successfully",
           "type": "timeseries",
-          "description": "Latest normal return across background pods. No successful run since startup yields no series here; see the never-succeeded panel. A normal return can still include handled item failures. Builder workers can run for hours; compare useful work and duration, not just freshness."
+          "description": "Latest normal return across background pods. No successful run since startup yields no series here; see the never-succeeded panel. A normal return can still include handled item failures. extract_sync runs every EXTRACT_SYNC_INTERVAL_SECONDS (60 s by default) and is bounded, so a gap of more than a few minutes there means input changes are not being reconciled."
         },
         {
           "datasource": {
@@ -4590,7 +6226,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 38
+            "y": 39
           },
           "id": 98,
           "options": {
@@ -4691,7 +6327,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 46
+            "y": 47
           },
           "id": 99,
           "options": {
@@ -4726,7 +6362,7 @@
           ],
           "title": "Background Job Results per Hour",
           "type": "timeseries",
-          "description": "Completed job invocations. Error means an exception escaped; handled item errors are reflected in request outcomes and builder batch failures. Abrupt process death cannot report a finished invocation."
+          "description": "Completed job invocations. Error means an exception escaped; handled item errors are reflected in request outcomes and sync errors. Abrupt process death cannot report a finished invocation."
         },
         {
           "datasource": {
@@ -4792,7 +6428,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 46
+            "y": 47
           },
           "id": 100,
           "options": {
@@ -4827,7 +6463,7 @@
           ],
           "title": "Background Job P95 Duration",
           "type": "timeseries",
-          "description": "Finished invocation durations. The global builder may run for hours and only records duration on return; its live progress is the tasks-created counter."
+          "description": "Finished invocation durations. extract_sync makes at most EXTRACT_SYNC_CHUNKS_PER_RUN short transactions per run, so a long one is waiting on locks or a slow reset, not doing more work."
         },
         {
           "datasource": {
@@ -4893,7 +6529,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 54
+            "y": 55
           },
           "id": 101,
           "options": {
@@ -4928,7 +6564,7 @@
           ],
           "title": "Background Work in the Trailing Hour",
           "type": "timeseries",
-          "description": "Committed builder task inserts, reclaimed stale tasks, completed request outputs, and handled builder batch errors. Builder progress increments after each batch, not only when its long-running job finishes."
+          "description": "Tasks reset by sync, reclaimed stale tasks, completed request outputs, sync chunk transactions, scopes published by sync, and sync failures."
         },
         {
           "datasource": {
@@ -4993,7 +6629,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 54
+            "y": 55
           },
           "id": 36,
           "options": {
@@ -5089,7 +6725,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 62
+            "y": 63
           },
           "id": 37,
           "options": {
@@ -5185,7 +6821,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 62
+            "y": 63
           },
           "id": 38,
           "options": {
@@ -5228,7 +6864,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 39
       },
       "id": 124,
       "panels": [
@@ -5304,7 +6940,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 39
+            "y": 40
           },
           "id": 102,
           "options": {
@@ -5405,7 +7041,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 39
+            "y": 40
           },
           "id": 103,
           "options": {
@@ -5506,7 +7142,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 47
+            "y": 48
           },
           "id": 104,
           "options": {
@@ -5607,7 +7243,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 47
+            "y": 48
           },
           "id": 105,
           "options": {
@@ -5714,7 +7350,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 55
+            "y": 56
           },
           "id": 106,
           "options": {
@@ -5815,7 +7451,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 55
+            "y": 56
           },
           "id": 107,
           "options": {
@@ -5924,7 +7560,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 63
+            "y": 64
           },
           "id": 108,
           "options": {
@@ -6031,7 +7667,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 63
+            "y": 64
           },
           "id": 109,
           "options": {
@@ -6132,7 +7768,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 71
+            "y": 72
           },
           "id": 110,
           "options": {
@@ -6233,7 +7869,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 71
+            "y": 72
           },
           "id": 111,
           "options": {
@@ -6334,7 +7970,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 79
+            "y": 80
           },
           "id": 112,
           "options": {
@@ -6381,7 +8017,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 40
       },
       "id": 125,
       "panels": [
@@ -6449,7 +8085,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 40
+            "y": 41
           },
           "id": 31,
           "options": {
@@ -6547,7 +8183,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 40
+            "y": 41
           },
           "id": 49,
           "options": {
@@ -6645,7 +8281,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 49
           },
           "id": 32,
           "options": {
@@ -6742,7 +8378,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 49
           },
           "id": 48,
           "options": {
@@ -6839,7 +8475,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 57
           },
           "id": 50,
           "options": {
@@ -6935,7 +8571,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 56
+            "y": 57
           },
           "id": 33,
           "options": {
@@ -7032,7 +8668,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 64
+            "y": 65
           },
           "id": 114,
           "options": {
@@ -7133,7 +8769,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 64
+            "y": 65
           },
           "id": 56,
           "options": {
@@ -7229,7 +8865,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 72
+            "y": 73
           },
           "id": 22,
           "options": {
@@ -7328,7 +8964,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 72
+            "y": 73
           },
           "id": 23,
           "options": {
@@ -7424,7 +9060,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 80
+            "y": 81
           },
           "id": 24,
           "options": {
@@ -7467,7 +9103,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 41
       },
       "id": 126,
       "panels": [
@@ -7536,7 +9172,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 41
+            "y": 42
           },
           "id": 52,
           "options": {
@@ -7574,7 +9210,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "All WAL divided by extract tasks completed: the database write cost of one unit of useful work, comparable across throughput levels. It includes the builder's inserts and request builds, so it rises when the builder runs. database.md recorded 2.8-3.9 KB.",
+          "description": "All WAL divided by completed extractions (claimed task rows plus lease features): the database write cost of one unit of useful work, comparable across throughput levels. It includes request builds and sync resets. database.md recorded 2.8-3.9 KB per task under the old builder, before lease pages, which insert finished rows and their results in one transaction.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -7634,7 +9270,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 41
+            "y": 42
           },
           "id": 53,
           "options": {
@@ -7658,7 +9294,7 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(rate(cnpg_collector_wal_bytes{namespace=~\"$namespace\"}[$__rate_interval])) / sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", outcome=\"completed\"}[$__rate_interval]))",
+              "expr": "sum(rate(cnpg_collector_wal_bytes{namespace=~\"$namespace\"}[$__rate_interval])) / ((sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval])) or vector(0)) + (sum(rate(geoquery_extract_lease_features_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval])) or vector(0)))",
               "legendFormat": "WAL per task",
               "range": true,
               "refId": "A"
@@ -7731,7 +9367,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 49
+            "y": 50
           },
           "id": 55,
           "options": {
@@ -7828,7 +9464,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 49
+            "y": 50
           },
           "id": 54,
           "options": {
@@ -7936,7 +9572,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 57
+            "y": 58
           },
           "id": 113,
           "options": {
@@ -8037,7 +9673,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 57
+            "y": 58
           },
           "id": 115,
           "options": {
@@ -8090,7 +9726,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Rows written per second, summed over partitions. Tasks created is the builder plus request materialization; normal successful processing makes two task updates (claim 0->2, finish 2->1), plus any sweep resets. extract_data rows are processing results. The former Celery extraction flow made three updates per task.",
+          "description": "Rows written per second, summed over partitions. Tasks created is request materialization plus finished lease pages, whose rows are inserted already complete. A claimed task makes two updates (claim 0->2, finish 2->1); sweep and sync resets add more. extract_data rows are processing results. The former Celery extraction flow made three updates per task.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -8149,7 +9785,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 65
+            "y": 66
           },
           "id": 58,
           "options": {
@@ -8209,7 +9845,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "description": "Row updates on extract_tasks per completed task. Normal successful processing makes two updates (0->2 claim, 2->1 finish), so the steady-state baseline is about 2. Failures, sweep resets and retries can raise the ratio; chunk timing can cause short-lived variation. The former Celery extraction flow used 0->3->2->1 and had a baseline near 3.",
+          "description": "Row updates on extract_tasks per completed claimed task (requests and retries). Lease pages insert their rows already complete and make no updates, so they are left out of both sides. A claimed task makes two updates (0->2 claim, 2->1 finish), so the steady-state baseline is about 2. Failures, sweep and sync resets and retries raise the ratio, and with few claimed tasks it is noisy. The former Celery extraction flow used 0->3->2->1 and had a baseline near 3.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -8268,7 +9904,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 65
+            "y": 66
           },
           "id": 59,
           "options": {
@@ -8292,13 +9928,13 @@
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "sum(rate(cnpg_geoquery_partitioned_tables_rows_updated{namespace=~\"$namespace\", relation=\"extract_tasks\"}[$__rate_interval])) / sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", outcome=\"completed\"}[$__rate_interval]))",
+              "expr": "sum(rate(cnpg_geoquery_partitioned_tables_rows_updated{namespace=~\"$namespace\", relation=\"extract_tasks\"}[$__rate_interval])) / sum(rate(geoquery_extract_tasks_total{namespace=~\"$namespace\", job=~\".*/geoquery-processing-worker\", outcome=~\"completed\"}[$__rate_interval]))",
               "legendFormat": "updates per task",
               "range": true,
               "refId": "A"
             }
           ],
-          "title": "extract_tasks Updates per Completed Task",
+          "title": "extract_tasks Updates per Completed Claimed Task",
           "type": "timeseries"
         },
         {
@@ -8366,7 +10002,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 73
+            "y": 74
           },
           "id": 60,
           "options": {
@@ -8464,7 +10100,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 73
+            "y": 74
           },
           "id": 61,
           "options": {
@@ -8562,7 +10198,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 82
           },
           "id": 62,
           "options": {
@@ -8670,7 +10306,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 81
+            "y": 82
           },
           "id": 63,
           "options": {
@@ -8760,7 +10396,7 @@
             "h": 10,
             "w": 24,
             "x": 0,
-            "y": 89
+            "y": 90
           },
           "id": 64,
           "options": {
@@ -8863,7 +10499,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 42
       },
       "id": 127,
       "panels": [
@@ -8929,7 +10565,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 43
           },
           "id": 2,
           "options": {
@@ -9024,7 +10660,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 43
           },
           "id": 3,
           "options": {
@@ -9094,7 +10730,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 50
+            "y": 51
           },
           "id": 18,
           "options": {
@@ -9197,7 +10833,7 @@
             "h": 8,
             "w": 12,
             "x": 6,
-            "y": 50
+            "y": 51
           },
           "id": 17,
           "options": {
@@ -9301,7 +10937,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 58
+            "y": 59
           },
           "id": 19,
           "options": {
@@ -9404,7 +11040,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 58
+            "y": 59
           },
           "id": 20,
           "options": {
@@ -9501,7 +11137,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 66
+            "y": 67
           },
           "id": 11,
           "options": {
@@ -9607,7 +11243,7 @@
             "h": 10,
             "w": 24,
             "x": 0,
-            "y": 74
+            "y": 75
           },
           "id": 12,
           "options": {
@@ -9702,7 +11338,7 @@
             "h": 10,
             "w": 24,
             "x": 0,
-            "y": 84
+            "y": 85
           },
           "id": 13,
           "options": {
@@ -9763,7 +11399,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 43
       },
       "id": 128,
       "panels": [
@@ -9830,7 +11466,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 43
+            "y": 44
           },
           "id": 5,
           "options": {
@@ -9927,7 +11563,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 43
+            "y": 44
           },
           "id": 6,
           "options": {
@@ -10053,7 +11689,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 51
+            "y": 52
           },
           "id": 7,
           "options": {
@@ -10131,7 +11767,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 51
+            "y": 52
           },
           "id": 8,
           "options": {
@@ -10252,7 +11888,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 59
+            "y": 60
           },
           "id": 9,
           "options": {
@@ -10295,7 +11931,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 44
       },
       "id": 129,
       "panels": [
@@ -10361,7 +11997,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 44
+            "y": 45
           },
           "id": 28,
           "options": {
@@ -10457,7 +12093,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 44
+            "y": 45
           },
           "id": 29,
           "options": {
@@ -10554,7 +12190,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 52
+            "y": 53
           },
           "id": 14,
           "options": {
@@ -10680,7 +12316,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 52
+            "y": 53
           },
           "id": 25,
           "options": {
@@ -10806,7 +12442,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 60
+            "y": 61
           },
           "id": 26,
           "options": {
@@ -10878,7 +12514,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 45
       },
       "id": 130,
       "panels": [
@@ -10951,7 +12587,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 46
           },
           "id": 73,
           "options": {
@@ -11054,7 +12690,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 46
           },
           "id": 74,
           "options": {
@@ -11163,7 +12799,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 53
+            "y": 54
           },
           "id": 116,
           "options": {
@@ -11264,7 +12900,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 53
+            "y": 54
           },
           "id": 117,
           "options": {

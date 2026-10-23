@@ -28,10 +28,6 @@ spec:
               drop:
                 - ALL
           env:
-            - name: EXTRACT_TASK_BUILD_BATCH_SIZE
-              value: {{ .Values.tasks.background.extractTaskBuildBatchSize | quote }}
-            - name: EXTRACT_TASK_BUILD_MAX_TASKS
-              value: {{ .Values.tasks.background.extractTaskBuildMaxTasks | quote }}
             - name: STATS_REPORT_INTERVAL_SECONDS
               value: {{ .Values.geoquery.statsReportIntervalSeconds | quote }}
             - name: DJANGO_TIME_ZONE

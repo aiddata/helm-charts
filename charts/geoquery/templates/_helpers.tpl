@@ -21,8 +21,8 @@ unset in the container — the way to disable an optional setting.
 {{- end -}}
 
 {{/*
-Host the processing-worker autoscaler reads the pending task count from.
-Prefer the ro pooler (a slightly stale count from a replica is fine), then
+Host the processing-worker autoscaler reads extract_work_demand() from.
+Prefer the ro pooler (a slightly stale figure from a replica is fine), then
 the rw pooler, then the primary service directly -- the same fallback order
 the backend uses for its read-only connection. The NetworkPolicy exceptions
 for the KEDA operator in networkpolicies/pooler.yaml and database.yaml are

@@ -1,11 +1,33 @@
+{{- $processing := .Values.tasks.processing }}
+{{- $leases := $processing.leases }}
+{{- /*
+  Django refuses to start on these (settings.py), but only once a pod is
+  running; failing the render reports it before anything rolls.
+*/}}
+{{- if or (lt (int $processing.drainSeconds) 1) (lt (int $leases.pageSize) 1) (lt (int $leases.blockSize) 1) }}
+{{- fail "tasks.processing.drainSeconds, leases.pageSize and leases.blockSize must be positive" }}
+{{- end }}
+{{- if gt (int $leases.blockSize) (int $leases.pageSize) }}
+{{- fail "tasks.processing.leases.blockSize must not exceed leases.pageSize" }}
+{{- end }}
+{{- if le (int $leases.leaseSeconds) (max 120 (int $processing.drainSeconds) | int) }}
+{{- fail "tasks.processing.leases.leaseSeconds must exceed both 120 and drainSeconds" }}
+{{- end }}
+{{- if lt (int $processing.terminationGracePeriodSeconds) (add (int $processing.drainSeconds) 60 | int) }}
+{{- fail "tasks.processing.terminationGracePeriodSeconds must be at least drainSeconds + 60, or a draining worker is killed mid-page" }}
+{{- end }}
+{{- $roPooler := and .Values.database.pooler.enabled .Values.database.pooler.ro.enabled }}
+{{- if and $leases.readReplica (not $roPooler) }}
+{{- fail "tasks.processing.leases.readReplica requires database.pooler.enabled and database.pooler.ro.enabled; without the ro pooler the replica alias is the primary" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: processing-worker
   namespace: {{ .Release.Namespace }}
 spec:
-  {{- if not .Values.tasks.processing.autoscaling.enabled }}
-  replicas: {{ .Values.tasks.processing.replicaCount }}
+  {{- if not $processing.autoscaling.enabled }}
+  replicas: {{ if $processing.paused }}0{{ else }}{{ $processing.replicaCount }}{{ end }}
   {{- end }}
   # There is no readiness probe, so a new pod is Ready as soon as it starts.
   # Hold each one for a bit before moving on, so a rollout replaces workers
@@ -24,10 +46,11 @@ spec:
       labels:
         app: geoquery-processing-worker
     spec:
-      # On SIGTERM the extract worker finishes the task each process is on and
-      # releases the rest of its chunk to pending, so this only has to cover
-      # one task per process.
-      terminationGracePeriodSeconds: {{ .Values.tasks.processing.terminationGracePeriodSeconds }}
+      # On SIGTERM each process either finishes the task it is on and releases
+      # the rest of its chunk to pending, or keeps computing its lease page for
+      # up to EXTRACT_WORKER_DRAIN_SECONDS before handing it back. The grace
+      # period has to cover the drain, which the checks above enforce.
+      terminationGracePeriodSeconds: {{ $processing.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -62,6 +85,20 @@ spec:
           env:
             - name: EXTRACT_TASK_CLAIM_BATCH
               value: "{{ .Values.tasks.processing.claimBatch }}"
+            - name: EXTRACT_WORKER_DRAIN_SECONDS
+              value: {{ $processing.drainSeconds | quote }}
+            - name: EXTRACT_TASK_LEASES_ENABLED
+              value: {{ ternary "1" "0" $leases.enabled | quote }}
+            - name: EXTRACT_TASK_LEASE_PAGE_SIZE
+              value: {{ $leases.pageSize | quote }}
+            - name: EXTRACT_TASK_LEASE_BLOCK_SIZE
+              value: {{ $leases.blockSize | quote }}
+            - name: EXTRACT_TASK_LEASE_SECONDS
+              value: {{ $leases.leaseSeconds | quote }}
+            - name: EXTRACT_TASK_LEASE_READ_REPLICA
+              value: {{ ternary "1" "0" $leases.readReplica | quote }}
+            - name: EXTRACT_TASK_LEASE_REPLICA_WAIT_SECONDS
+              value: {{ $leases.replicaWaitSeconds | quote }}
             - name: DJANGO_TIME_ZONE
               value: {{ .Values.django.timeZone }}
             {{- include "geoquery.secretEnv" (dict "name" "DJANGO_SECRET_KEY" "ref" .Values.django.secretKey) | nindent 12 }}
@@ -102,10 +139,43 @@ spec:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: password
+            # Read-only replica target, for lease input reads when
+            # leases.readReplica is on. Django opens it only when that is on,
+            # so it costs nothing otherwise. Falls back to the primary when
+            # the ro pooler is disabled, the same as the background worker.
+            - name: PG_RO_HOST
+              {{- if $roPooler }}
+              value: geoquery-db-pooler-ro
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: host
+              {{- end }}
+            - name: PG_RO_DBNAME
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: dbname
+            - name: PG_RO_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: port
+            - name: PG_RO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: username
+            - name: PG_RO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: geoquery-db-app
+                  key: password
             - name: PROTOMAPS_API_KEY
               value: {{ .Values.protomaps.key }}
             {{- if .Values.metrics.enabled }}
-            # The extract worker's parent serves the extract task metrics on
+            # The extract worker's parent serves the extract and lease metrics on
             # 9091, summed from per-process files its children write under
             # PROMETHEUS_MULTIPROC_DIR (created on start, inside the /tmp
             # emptyDir). PROMETHEUS_ENABLED stays unset here: django-prometheus's

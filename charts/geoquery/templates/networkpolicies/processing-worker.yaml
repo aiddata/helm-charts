@@ -14,8 +14,8 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-  # Processing workers pull from queues, so the only inbound traffic is
-  # Prometheus scraping the extract task metrics port
+  # Processing workers claim their work from PostgreSQL, so the only inbound
+  # traffic is Prometheus scraping the extract task metrics port
   ingress:
     {{- if .Values.metrics.enabled }}
     - from:
@@ -40,7 +40,11 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Allow connection to PostgreSQL, via the pooler when it's enabled
+    # Allow connection to PostgreSQL, via the poolers when they're enabled.
+    # The ro pooler serves lease input reads (tasks.processing.leases.
+    # readReplica). It is allowed whenever it exists, so turning the setting
+    # on by hand (kubectl set env) reaches it instead of hanging on a dropped
+    # connect.
     - to:
         - podSelector:
             matchLabels:
@@ -49,18 +53,17 @@ spec:
         - podSelector:
             matchLabels:
               cnpg.io/poolerName: geoquery-db-pooler-rw
+        {{- if .Values.database.pooler.ro.enabled }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: geoquery-db-pooler-ro
+        {{- end }}
         {{- end }}
       ports:
         - protocol: TCP
           port: 5432
-    # Allow connection to RabbitMQ
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: geoquery-rabbitmq
-      ports:
-        - protocol: TCP
-          port: 5672
+    # No RabbitMQ: the extract worker is not a Celery worker and publishes
+    # nothing, so it has no broker connection to allow.
     # Allow external API egress (OSM, Wikidata, Postpass, R2, etc.)
     {{- if .Values.networkPolicies.externalEgress.allowAll }}
     - to:
