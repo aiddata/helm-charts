@@ -88,6 +88,11 @@ data:
       proxy_set_header Upgrade           $http_upgrade;
       proxy_set_header Connection        $connection_upgrade;
 
+      # Room for large upstream response headers, e.g. SvelteKit's preload
+      # Link header, which overflows nginx's 4k/8k default.
+      proxy_buffer_size       16k;
+      proxy_busy_buffers_size 16k;
+
       server {
         listen {{ .Values.proxy.containerPort }};
         server_name _;
