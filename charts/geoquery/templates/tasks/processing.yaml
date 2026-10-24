@@ -32,12 +32,12 @@ spec:
   # There is no readiness probe, so a new pod is Ready as soon as it starts.
   # Hold each one for a bit before moving on, so a rollout replaces workers
   # gradually instead of in a few near-instant waves.
-  minReadySeconds: 30
+  minReadySeconds: {{ $processing.rollout.minReadySeconds }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+      maxUnavailable: {{ $processing.rollout.maxUnavailable }}
+      maxSurge: {{ $processing.rollout.maxSurge }}
   selector:
     matchLabels:
       app: geoquery-processing-worker

@@ -304,6 +304,14 @@ tasks:
     # claimContention autoscaling holds the replica count, so this is also
     # the longest a scale-down or rollout can freeze it.
     terminationGracePeriodSeconds: 900
+    # Rolling update pace for the processing-worker Deployment. maxSurge and
+    # maxUnavailable take a count or a percentage ("25%"). Replaced pods keep
+    # draining for up to drainSeconds, so a faster rollout means more old and
+    # new pods running side by side.
+    rollout:
+      maxSurge: 3
+      maxUnavailable: 0
+      minReadySeconds: 10
     # Pair cursor leases: how background extraction is done. Instead of task
     # rows built ahead of time, a worker slot leases a page of features above
     # a pair's cursor, computes it with no transaction open, and writes the

@@ -4,7 +4,7 @@ metadata:
   name: geoquery-backend
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: {{ .Values.frontend.replicaCount }}
+  replicas: {{ .Values.backend.replicaCount }}
   selector:
     matchLabels:
       app: geoquery-backend
