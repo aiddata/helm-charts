@@ -135,6 +135,8 @@ spec:
                 secretKeyRef:
                   name: geoquery-db-app
                   key: password
+            - name: PG_POOL_MAX_SIZE
+              value: {{ .Values.backend.dbPoolMaxSize | quote }}
             - name: PROTOMAPS_API_KEY
               value: {{.Values.protomaps.key }}
             - name: RABBITMQ_HOST

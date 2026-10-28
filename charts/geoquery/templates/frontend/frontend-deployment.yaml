@@ -20,6 +20,9 @@ spec:
       containers:
         - name: django
           image: {{ .Values.frontend.image }}
+          env:
+            - name: PUBLIC_PROTOMAPS_API_KEY
+              value: {{ .Values.protomaps.key | quote }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

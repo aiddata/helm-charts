@@ -1,10 +1,18 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:6e6cdbc
+  image: ghcr.io/aiddata/geoquery-frontend:5ba1e18
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:6e6cdbc
+  image: ghcr.io/aiddata/geoquery-backend:5ba1e18
   replicaCount: 1
+  # Client-side connection pool per backend pod, per database alias (default
+  # and replica), held open to the api and ro poolers. Without it every
+  # request opens and logs in to pgBouncer afresh (~20 ms). These are
+  # pgBouncer client connections, counted against max_client_conn, not the
+  # server budget. 0 disables it. Requires a backend image that depends on
+  # psycopg[pool]; with an older image every database query fails with
+  # ImproperlyConfigured.
+  dbPoolMaxSize: 20
   # import.runAsUser / import.runAsGroup: optional overrides for the pod
   # securityContext of the geoquery-import deployment. Defaults to
   # volumes.requests.runAsUser / runAsGroup. Set these only when the import
