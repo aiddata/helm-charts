@@ -1,0 +1,39 @@
+{{- if .Values.metrics.enabled }}
+{{- if .Values.metrics.prometheusRule.enabled }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-geoquery
+  namespace: {{ .Values.metrics.prometheusRule.namespace | default .Release.Namespace }}
+  labels:
+    app: geoquery
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: geoquery-extraction
+      rules:
+        # Exported by the background worker's error sweep
+        # (manage_processing_task_errors, every ten minutes). max() because
+        # every background-worker pod exports its own series and only the one
+        # that last ran the sweep is current.
+        - alert: GeoQueryExtractTasksExhausted
+          expr: max(geoquery_extract_tasks_exhausted{namespace="{{ .Release.Namespace }}", job=~".*/geoquery-background-worker"}) > 0
+          # One sweep interval, so a count the next sweep clears does not page.
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ "{{" }} $value {{ "}}" }} extract task(s) in {{ .Release.Namespace }} have used every retry"
+            description: >-
+              These tasks are never retried again: a request holding one is
+              failed, and a background feature stays without a value until its
+              inputs change. geoquery_extract_task_failures_total and the
+              background worker's "Retrying extract task" log lines say why
+              they failed; the tasks are status = -1 with attempts >=
+              MAX_EXTRACT_TASK_ATTEMPTS in extract_tasks.
+{{- end }}
+{{- end }}
+{{- end }}
