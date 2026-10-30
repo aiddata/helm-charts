@@ -128,6 +128,8 @@ proxy:
     # Route result files (e.g. /requests/{uuid}/file.zip) to the backend
     # while leaving the frontend page (/requests/{uuid}/) on the frontend.
     - "^/requests/[^/]+/.+"
+    # Legacy result zips, served from /requests/legacy/ on the requests share.
+    - '^/requests/legacy/[0-9a-f]+\.zip$'
   backendPaths:
     - /admin
     - /api
