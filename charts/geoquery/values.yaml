@@ -128,8 +128,12 @@ proxy:
     # Route result files (e.g. /requests/{uuid}/file.zip) to the backend
     # while leaving the frontend page (/requests/{uuid}/) on the frontend.
     - "^/requests/[^/]+/.+"
-    # Legacy result zips, served from /requests/legacy/ on the requests share.
-    - '^/requests/legacy/[0-9a-f]+\.zip$'
+    # Dead since geoquery 0.84.4: the legacy archive was re-laid out from a
+    # flat requests/legacy/<id>.zip to requests/legacy/<id>/<id>.zip, which the
+    # generic rule above already matches. Kept commented rather than deleted
+    # because the flat layout is what forced this rule's existence, and the
+    # same mistake is easy to repeat.
+    # - '^/requests/legacy/[0-9a-f]+\.zip$'
   backendPaths:
     - /admin
     - /api
