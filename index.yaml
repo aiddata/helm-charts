@@ -3,6 +3,16 @@ entries:
   geoquery:
   - apiVersion: v2
     appVersion: latest
+    created: "2026-11-04T21:55:12.286621802Z"
+    description: Official Helm chart for GeoQuery
+    digest: be13f2d5bfc288e4f1da877128f607e16304c1e0ce8e80a73bce8b10e5b8187e
+    name: geoquery
+    type: application
+    urls:
+    - https://github.com/aiddata/helm-charts/releases/download/geoquery-0.86.1/geoquery-0.86.1.tgz
+    version: 0.86.1
+  - apiVersion: v2
+    appVersion: latest
     created: "2026-11-03T15:29:08.940034895Z"
     description: Official Helm chart for GeoQuery
     digest: 85d1b4c303b2791a33c9307979978590535db76ec6d1b6b4910d0af4e55f2fd4
@@ -2081,4 +2091,4 @@ entries:
     urls:
     - https://github.com/aiddata/helm-charts/releases/download/geoquery-0.2.0/geoquery-0.2.0.tgz
     version: 0.2.0
-generated: "2026-11-03T15:29:08.940802876Z"
+generated: "2026-11-04T21:55:12.286996423Z"
