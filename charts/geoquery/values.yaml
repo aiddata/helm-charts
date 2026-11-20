@@ -1,9 +1,9 @@
 frontend:
-  image: ghcr.io/aiddata/geoquery-frontend:0a64942
+  image: ghcr.io/aiddata/geoquery-frontend:8cfa992
   replicaCount: 1
 
 backend:
-  image: ghcr.io/aiddata/geoquery-backend:83cf28a
+  image: ghcr.io/aiddata/geoquery-backend:8cfa992
   replicaCount: 1
   # Client-side connection pool per backend pod, per database alias (default
   # and replica), held open to the api and ro poolers. Without it every
